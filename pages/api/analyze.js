@@ -1,6 +1,7 @@
 // pages/api/analyze.js
 import fs from "fs";
 import path from "path";
+import os from "os";
 import OpenAI from "openai";
 import { Pool } from "pg";
 
@@ -243,30 +244,82 @@ JSON:
 
 // ---------- API handler ----------
 export default async function handler(req, res) {
+  let cleanupTmpFile = null;
+
   try {
     if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-    const { filename } = req.body || {};
-    if (!filename) return res.status(400).json({ error: "filename missing" });
+    const { file } = req.body || {};
+    const storage = file?.storage || "local";
+    const filename = file?.filename;
+    const fileUrl = file?.url;
 
-    const localPath = path.join(process.cwd(), "public", "uploads", filename);
-    if (!fs.existsSync(localPath)) return res.status(404).json({ error: "file not found" });
+    if (!filename && !fileUrl) {
+      return res.status(400).json({ error: "filename or url missing" });
+    }
 
-    console.log("📥 Analyze triggered for file:", filename);
+    let localPath = "";
+
+    if (storage === "blob") {
+      if (!fileUrl) return res.status(400).json({ error: "blob url missing" });
+      const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "invoice-"));
+      const ext = path.extname(filename || "") || path.extname(new URL(fileUrl).pathname || "");
+      const tmpPath = path.join(tmpDir, `${Date.now()}${ext || ""}`);
+      console.log("[analyze] Downloading blob to temp file", { fileUrl, tmpPath });
+      const resp = await fetch(fileUrl);
+      if (!resp.ok) {
+        throw new Error(`Failed to download blob (${resp.status})`);
+      }
+      const arrayBuffer = await resp.arrayBuffer();
+      await fs.promises.writeFile(tmpPath, Buffer.from(arrayBuffer));
+      localPath = tmpPath;
+      cleanupTmpFile = async () => {
+        try {
+          await fs.promises.rm(tmpDir, { recursive: true, force: true });
+        } catch (cleanupErr) {
+          console.warn("[analyze] Failed to cleanup tmp dir", cleanupErr);
+        }
+      };
+    } else {
+      localPath = path.join(process.cwd(), "public", "uploads", filename);
+      if (!fs.existsSync(localPath)) {
+        return res.status(404).json({ error: "file not found" });
+      }
+    }
+
+    console.log("📥 Analyze triggered for file:", { filename, storage });
 
     // 1) Extract all invoice details + first AI suggestions
     const { rawText, structured } = await extractInvoiceWithAI(localPath);
+    console.log("[analyze] Extraction finished", {
+      hasStructured: Boolean(structured),
+      hasRawText: Boolean(rawText),
+      suggestions: structured?.boekhoudcategorie_suggesties?.length || 0,
+    });
 
     // 2) Build keyword list from AI suggestions
     const aiKeywords = pickKeywordsFromAI(structured);
     // If AI gave nothing, derive a few from the raw text heuristically
     const fallbackKw = ["telecommunicatie", "internet", "abonnement", "hosting", "kantoorkosten"];
     const keywords = (aiKeywords.length ? aiKeywords : fallbackKw).map(s => s.toLowerCase());
+    console.log("[analyze] Keywords chosen", {
+      aiSuggested: aiKeywords,
+      usingFallback: aiKeywords.length === 0,
+      final: keywords,
+    });
     // 3) Query COA 3.7 DB (leaf-only candidates)
     const candidates = await fetchCoaLeafCandidates(keywords);
+    console.log("[analyze] DB candidates fetched", {
+      keywordCount: keywords.length,
+      candidateCount: candidates.length,
+    });
 
     // 4) Ask AI to rank those concrete DB candidates for this invoice
     const aiRanking = await rankDbCandidatesWithAI(structured, candidates);
+    console.log("[analyze] AI ranking ready", {
+      keuze: aiRanking?.keuze_nummer,
+      scoreKeys: aiRanking?.scores ? Object.keys(aiRanking.scores).length : 0,
+    });
 
     // 5) Respond with everything (visibility & control)
     res.status(200).json({
@@ -280,5 +333,9 @@ export default async function handler(req, res) {
   } catch (err) {
     console.error("❌ Error in analyze:", err);
     res.status(500).json({ error: err.message });
+  } finally {
+    if (cleanupTmpFile) {
+      await cleanupTmpFile();
+    }
   }
 }

@@ -1,7 +1,7 @@
 // components/UploadForm.js
 import { useState, useMemo } from "react";
 
-export default function UploadForm() {
+export default function UploadForm({ onAnalyze }) {
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
@@ -27,16 +27,35 @@ export default function UploadForm() {
     const formData = new FormData();
     formData.append("file", file);
     const up = await fetch("/api/upload", { method: "POST", body: formData });
+    if (!up.ok) {
+      setLoading(false);
+      const errorText = await up.text();
+      console.error("Upload failed", errorText);
+      return;
+    }
     const upData = await up.json();
 
     // 2) analyze
     const az = await fetch("/api/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ filename: upData.filename }),
+      body: JSON.stringify({ file: upData }),
     });
+    if (!az.ok) {
+      setLoading(false);
+      const errorText = await az.text();
+      console.error("Analyze failed", errorText);
+      return;
+    }
     const azData = await az.json();
     setData(azData);
+    if (typeof onAnalyze === "function") {
+      try {
+        onAnalyze(azData);
+      } catch (callbackErr) {
+        console.warn("onAnalyze callback threw", callbackErr);
+      }
+    }
 
     // preselect best choice
     if (azData?.ai_ranking?.keuze_nummer) {
