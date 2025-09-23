@@ -48,8 +48,12 @@ export default async function handler(req, res) {
         });
         const buffer = await fs.promises.readFile(file.filepath);
         const blobPath = `uploads/${newFileName}`;
+        const access = process.env.BLOB_ACCESS || "public";
+        if (access !== "public" && access !== "private") {
+          console.warn("[upload] Invalid BLOB_ACCESS value, defaulting to public", { access });
+        }
         const blob = await put(blobPath, buffer, {
-          access: "private",
+          access: access === "private" ? "private" : "public",
           addRandomSuffix: false,
           contentType: file.mimetype || undefined,
         });

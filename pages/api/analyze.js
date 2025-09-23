@@ -247,6 +247,10 @@ export default async function handler(req, res) {
   let cleanupTmpFile = null;
 
   try {
+    console.log("[analyze] Incoming request", {
+      method: req.method,
+      headers: req.headers["content-type"],
+    });
     if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
     const { file } = req.body || {};

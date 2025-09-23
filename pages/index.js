@@ -6,22 +6,12 @@ import BookingDropdown from "../components/BookingDropdown";
 export default function Home() {
   const [analysis, setAnalysis] = useState(null);
 
-  const handleAnalyze = async (filename) => {
-    const res = await fetch("/api/analyze", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ filename }),
-    });
-    const data = await res.json();
-    setAnalysis(data);
-  };
-
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <h1 className="text-2xl font-bold mb-6">🚀 Bookkeeping Dashboard</h1>
 
       {/* Upload form */}
-      <UploadForm onAnalyze={handleAnalyze} />
+      <UploadForm onAnalyze={(result) => setAnalysis(result)} />
 
       {analysis && (
         <div className="mt-8 space-y-6">
