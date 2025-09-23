@@ -19,12 +19,12 @@ export default function Home() {
           <div className="p-4 bg-white shadow rounded">
             <h2 className="text-lg font-semibold mb-2">📄 Extracted Invoice Text</h2>
             <pre className="text-sm text-gray-700 whitespace-pre-wrap">
-              {analysis.invoice || "⚠️ No invoice text extracted"}
+              {analysis.invoice_text || "⚠️ No invoice text extracted"}
             </pre>
           </div>
 
           {/* 2. Show booking dropdown */}
-          <BookingDropdown candidates={analysis.result} />
+          <BookingDropdown analysis={analysis} />
         </div>
       )}
     </div>
