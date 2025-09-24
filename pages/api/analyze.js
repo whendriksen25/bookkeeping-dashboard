@@ -7,10 +7,16 @@ import { Pool } from "pg";
 import { PDFDocument } from "pdf-lib";
 import sharp from "sharp";
 import { ImagePool } from "@squoosh/lib";
+import { ImagePool } from "@squoosh/lib";
 
 const imagePool = new ImagePool(1);
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+const squooshWasmRoot = path.join(process.cwd(), "node_modules", "@squoosh", "lib", "build");
+if (!process.env.SQUOOSH_WASM_ROOT) {
+  process.env.SQUOOSH_WASM_ROOT = squooshWasmRoot;
+}
 
 const pool =
   process.env.DATABASE_URL
@@ -69,6 +75,19 @@ function summarizeForAI(structured) {
   ].join("\n");
 }
 
+async function convertHeicToJpeg(filePath) {
+  const fileBuffer = await fs.promises.readFile(filePath);
+  const pool = new ImagePool(1);
+  try {
+    const image = pool.ingestImage(fileBuffer);
+    await image.encode({ mozjpeg: {} });
+    const { binary } = await image.encodedWith.mozjpeg;
+    return Buffer.from(binary);
+  } finally {
+    await pool.close();
+  }
+}
+
 async function ensurePdf(filePath) {
   const ext = path.extname(filePath || "").toLowerCase();
   if (ext === ".pdf") {
@@ -86,11 +105,7 @@ async function ensurePdf(filePath) {
     buffer = await image.jpeg().toBuffer();
     format = "jpg";
   } else if (ext === ".heic" || ext === ".heif" || ext === ".heics") {
-    const originalBuffer = await fs.promises.readFile(filePath);
-    const squooshImage = imagePool.ingestImage(originalBuffer);
-    await squooshImage.encode({ mozjpeg: {} });
-    const { binary } = await squooshImage.encodedWith.mozjpeg;
-    buffer = Buffer.from(binary);
+    buffer = await convertHeicToJpeg(filePath);
     format = "jpg";
   } else {
     throw new Error(`Unsupported file type: ${ext || "unknown"}`);
