@@ -72,7 +72,7 @@ export default function UploadForm({ onAnalyze }) {
       <form onSubmit={handleSubmit} className="space-y-3">
         <input
           type="file"
-          accept=".pdf,.png,.jpg,.jpeg"
+          accept=".pdf,.png,.jpg,.jpeg,.heic,.heif,.heics,image/*"
           onChange={(e) => setFile(e.target.files[0] || null)}
           className="block w-full border rounded p-2"
         />
