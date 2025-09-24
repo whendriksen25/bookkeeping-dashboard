@@ -6,9 +6,6 @@ import OpenAI from "openai";
 import { Pool } from "pg";
 import { PDFDocument } from "pdf-lib";
 import sharp from "sharp";
-import heif from "@img/sharp-heif";
-
-sharp.install(heif);
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -75,17 +72,18 @@ async function ensurePdf(filePath) {
     return { pdfPath: filePath, cleanup: null };
   }
 
+  const image = sharp(filePath).withMetadata();
   let buffer;
   let format;
 
   if (ext === ".png") {
-    buffer = await fs.promises.readFile(filePath);
+    buffer = await image.png().toBuffer();
     format = "png";
   } else if (ext === ".jpg" || ext === ".jpeg") {
-    buffer = await fs.promises.readFile(filePath);
+    buffer = await image.jpeg().toBuffer();
     format = "jpg";
   } else if (ext === ".heic" || ext === ".heif" || ext === ".heics") {
-    buffer = await sharp(filePath).withMetadata().jpeg().toBuffer();
+    buffer = await image.jpeg().toBuffer();
     format = "jpg";
   } else {
     throw new Error(`Unsupported file type: ${ext || "unknown"}`);
