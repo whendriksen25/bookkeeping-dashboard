@@ -4,6 +4,11 @@ import path from "path";
 import os from "os";
 import OpenAI from "openai";
 import { Pool } from "pg";
+import { PDFDocument } from "pdf-lib";
+import sharp from "sharp";
+import heif from "@img/sharp-heif";
+
+sharp.install(heif);
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -46,25 +51,83 @@ function summarizeForAI(structured) {
   const a = f.afzender || {};
   const b = f.ontvanger || {};
   const t = f.totaal || {};
-  const regels = Array.isArray(f.regels) ? f.regels.map(r => `${r.omschrijving ?? ""} x${r.aantal ?? ""} = ${r.bedrag ?? ""}`).join("; ") : "";
+  const regels = Array.isArray(f.regels)
+    ? f.regels
+        .map((r) => `${r.omschrijving ?? ""} x${r.aantal ?? ""} = ${r.bedrag ?? ""}`)
+        .join("; ")
+    : "";
   return [
-    `Afzender: ${a.naam ?? ""} (KvK: ${a.kvk_nummer ?? ""}, BTW: ${a.btw_nummer ?? ""}, Email: ${a.email ?? ""}, Tel: ${a.telefoon ?? ""})`,
-    `Ontvanger: ${b.naam ?? ""} (KvK: ${b.kvk_nummer ?? ""}, BTW: ${b.btw_nummer ?? ""}, Email: ${b.email ?? ""}, Tel: ${b.telefoon ?? ""})`,
+    `Afzender: ${a.naam ?? ""} (KvK: ${a.kvk_nummer ?? ""}, BTW: ${a.btw_nummer ?? ""}, Email: ${
+      a.email ?? ""
+    }, Tel: ${a.telefoon ?? ""})`,
+    `Ontvanger: ${b.naam ?? ""} (KvK: ${b.kvk_nummer ?? ""}, BTW: ${b.btw_nummer ?? ""}, Email: ${
+      b.email ?? ""
+    }, Tel: ${b.telefoon ?? ""})`,
     `Factuur: #${f.factuurnummer ?? ""} d.d. ${f.factuurdatum ?? ""} vervaldatum ${f.vervaldatum ?? ""}`,
     `Totaal excl: ${t.totaal_excl_btw ?? ""}, BTW: ${t.btw ?? ""}, Totaal incl: ${t.totaal_incl_btw ?? ""}`,
     `Regels: ${regels}`,
   ].join("\n");
 }
 
-async function extractInvoiceWithAI(localPath) {
-  // 1) Upload the file
-  const file = await client.files.create({
-    file: fs.createReadStream(localPath),
-    purpose: "assistants",
+async function ensurePdf(filePath) {
+  const ext = path.extname(filePath || "").toLowerCase();
+  if (ext === ".pdf") {
+    return { pdfPath: filePath, cleanup: null };
+  }
+
+  let buffer;
+  let format;
+
+  if (ext === ".png") {
+    buffer = await fs.promises.readFile(filePath);
+    format = "png";
+  } else if (ext === ".jpg" || ext === ".jpeg") {
+    buffer = await fs.promises.readFile(filePath);
+    format = "jpg";
+  } else if (ext === ".heic" || ext === ".heif" || ext === ".heics") {
+    buffer = await sharp(filePath).withMetadata().jpeg().toBuffer();
+    format = "jpg";
+  } else {
+    throw new Error(`Unsupported file type: ${ext || "unknown"}`);
+  }
+
+  const pdfDoc = await PDFDocument.create();
+  const embedded =
+    format === "png" ? await pdfDoc.embedPng(buffer) : await pdfDoc.embedJpg(buffer);
+
+  const page = pdfDoc.addPage([embedded.width, embedded.height]);
+  page.drawImage(embedded, {
+    x: 0,
+    y: 0,
+    width: embedded.width,
+    height: embedded.height,
   });
 
-  // 2) Ask model for structured JSON + raw text + 1st pass account suggestions
-  const prompt = `
+  const pdfBytes = await pdfDoc.save();
+  const tmpPdfPath = path.join(os.tmpdir(), `invoice-${Date.now()}.pdf`);
+  await fs.promises.writeFile(tmpPdfPath, pdfBytes);
+
+  return {
+    pdfPath: tmpPdfPath,
+    cleanup: async () => {
+      try {
+        await fs.promises.unlink(tmpPdfPath);
+      } catch (err) {
+        console.warn("[analyze] Failed to cleanup temp pdf", err?.message);
+      }
+    },
+  };
+}
+
+async function extractInvoiceWithAI(localPath) {
+  const { pdfPath, cleanup } = await ensurePdf(localPath);
+  try {
+    const file = await client.files.create({
+      file: fs.createReadStream(pdfPath),
+      purpose: "assistants",
+    });
+
+    const prompt = `
 Je bent een Nederlandse boekhoudassistent. Lees de bijgevoegde factuur (PDF/beeld) en geef ALLE onderstaande velden exact in JSON terug (en niets anders):
 
 {
@@ -99,34 +162,34 @@ Regels:
 - Antwoord met ALLEEN JSON (geen uitleg, geen markdown, geen backticks).
 `;
 
-  const resp = await client.responses.create({
-    model: "gpt-4o-mini",
-    input: [
-      {
-        role: "user",
-        content: [
-          { type: "input_text", text: prompt },
-          { type: "input_file", file_id: file.id },
-        ],
-      },
-    ],
-    temperature: 0,
-  });
+    const resp = await client.responses.create({
+      model: "gpt-4o-mini",
+      input: [
+        {
+          role: "user",
+          content: [
+            { type: "input_text", text: prompt },
+            { type: "input_file", file_id: file.id },
+          ],
+        },
+      ],
+      temperature: 0,
+    });
 
-  // Responses API → get text
-  let text = "";
-  try {
-    // Try responses.output format
-    const blocks = resp.output?.[0]?.content || [];
-    const textBlocks = blocks.filter(b => b.type === "output_text");
-    text = textBlocks.map(b => b.text).join("\n").trim();
-  } catch {
-    // Fallback to choices (if it ever returns that shape)
-    text = resp.choices?.[0]?.message?.content || "";
+    let text = "";
+    try {
+      const blocks = resp.output?.[0]?.content || [];
+      const textBlocks = blocks.filter((b) => b.type === "output_text");
+      text = textBlocks.map((b) => b.text).join("\n").trim();
+    } catch {
+      text = resp.choices?.[0]?.message?.content || "";
+    }
+
+    const parsed = safeParseJSON(text);
+    return { rawText: text, structured: parsed };
+  } finally {
+    await cleanup?.();
   }
-
-  const parsed = safeParseJSON(text);
-  return { rawText: text, structured: parsed };
 }
 
 function pickKeywordsFromAI(structured) {
@@ -141,7 +204,7 @@ function pickKeywordsFromAI(structured) {
       if (k) list.push(k);
     }
   }
-  return [...new Set(list.map(x => String(x).toLowerCase()))].slice(0, 8);
+  return [...new Set(list.map((x) => String(x).toLowerCase()))].slice(0, 8);
 }
 
 async function fetchCoaLeafCandidates(keywords) {
@@ -169,7 +232,7 @@ async function fetchCoaLeafCandidates(keywords) {
   `;
 
   const { rows } = await pool.query(sql, [keywords]);
-  return rows.map(r => ({
+  return rows.map((r) => ({
     number: r.number,
     description: r.description,
     level: r.level,
@@ -200,7 +263,7 @@ Antwoord ALLEEN met JSON in dit formaat (geen markdown):
 - Gebruik ALLE kandidaten in "scores".
 `;
 
-  const list = candidates.map(c => `- ${c.number}: ${c.description}`).join("\n");
+  const list = candidates.map((c) => `- ${c.number}: ${c.description}`).join("\n");
 
   const message = `
 Factuur (samenvatting):
@@ -224,7 +287,6 @@ JSON:
   const content = resp.choices?.[0]?.message?.content || "";
   const parsed = safeParseJSON(content);
   if (!parsed?.scores) {
-    // fallback: build a flat distribution with the first candidate best
     const top = candidates[0];
     const rest = candidates.slice(1);
     const scores = {};
@@ -267,7 +329,8 @@ export default async function handler(req, res) {
     if (storage === "blob") {
       if (!fileUrl) return res.status(400).json({ error: "blob url missing" });
       const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "invoice-"));
-      const ext = path.extname(filename || "") || path.extname(new URL(fileUrl).pathname || "");
+      const ext =
+        path.extname(filename || "") || path.extname(new URL(fileUrl).pathname || "");
       const tmpPath = path.join(tmpDir, `${Date.now()}${ext || ""}`);
       console.log("[analyze] Downloading blob to temp file", { fileUrl, tmpPath });
       const resp = await fetch(fileUrl);
@@ -293,7 +356,6 @@ export default async function handler(req, res) {
 
     console.log("📥 Analyze triggered for file:", { filename, storage });
 
-    // 1) Extract all invoice details + first AI suggestions
     const { rawText, structured } = await extractInvoiceWithAI(localPath);
     console.log("[analyze] Extraction finished", {
       hasStructured: Boolean(structured),
@@ -301,31 +363,27 @@ export default async function handler(req, res) {
       suggestions: structured?.boekhoudcategorie_suggesties?.length || 0,
     });
 
-    // 2) Build keyword list from AI suggestions
     const aiKeywords = pickKeywordsFromAI(structured);
-    // If AI gave nothing, derive a few from the raw text heuristically
     const fallbackKw = ["telecommunicatie", "internet", "abonnement", "hosting", "kantoorkosten"];
-    const keywords = (aiKeywords.length ? aiKeywords : fallbackKw).map(s => s.toLowerCase());
+    const keywords = (aiKeywords.length ? aiKeywords : fallbackKw).map((s) => s.toLowerCase());
     console.log("[analyze] Keywords chosen", {
       aiSuggested: aiKeywords,
       usingFallback: aiKeywords.length === 0,
       final: keywords,
     });
-    // 3) Query COA 3.7 DB (leaf-only candidates)
+
     const candidates = await fetchCoaLeafCandidates(keywords);
     console.log("[analyze] DB candidates fetched", {
       keywordCount: keywords.length,
       candidateCount: candidates.length,
     });
 
-    // 4) Ask AI to rank those concrete DB candidates for this invoice
     const aiRanking = await rankDbCandidatesWithAI(structured, candidates);
     console.log("[analyze] AI ranking ready", {
       keuze: aiRanking?.keuze_nummer,
       scoreKeys: aiRanking?.scores ? Object.keys(aiRanking.scores).length : 0,
     });
 
-    // 5) Respond with everything (visibility & control)
     res.status(200).json({
       invoice_text: structured?.ruwe_tekst || rawText || "",
       factuurdetails: structured?.factuurdetails || {},
