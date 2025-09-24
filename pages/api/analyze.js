@@ -6,6 +6,9 @@ import OpenAI from "openai";
 import { Pool } from "pg";
 import { PDFDocument } from "pdf-lib";
 import sharp from "sharp";
+import { ImagePool } from "@squoosh/lib";
+
+const imagePool = new ImagePool(1);
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -83,7 +86,11 @@ async function ensurePdf(filePath) {
     buffer = await image.jpeg().toBuffer();
     format = "jpg";
   } else if (ext === ".heic" || ext === ".heif" || ext === ".heics") {
-    buffer = await image.jpeg().toBuffer();
+    const originalBuffer = await fs.promises.readFile(filePath);
+    const squooshImage = imagePool.ingestImage(originalBuffer);
+    await squooshImage.encode({ mozjpeg: {} });
+    const { binary } = await squooshImage.encodedWith.mozjpeg;
+    buffer = Buffer.from(binary);
     format = "jpg";
   } else {
     throw new Error(`Unsupported file type: ${ext || "unknown"}`);
