@@ -6,14 +6,9 @@ import OpenAI from "openai";
 import { Pool } from "pg";
 import { PDFDocument } from "pdf-lib";
 import sharp from "sharp";
-import { ImagePool } from "@squoosh/lib";
+import { Image } from "@napi-rs/image";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-const squooshWasmRoot = path.join(process.cwd(), "node_modules", "@squoosh", "lib", "build");
-if (!process.env.SQUOOSH_WASM_ROOT) {
-  process.env.SQUOOSH_WASM_ROOT = squooshWasmRoot;
-}
 
 const pool =
   process.env.DATABASE_URL
@@ -74,15 +69,9 @@ function summarizeForAI(structured) {
 
 async function convertHeicToJpeg(filePath) {
   const fileBuffer = await fs.promises.readFile(filePath);
-  const pool = new ImagePool(1);
-  try {
-    const image = pool.ingestImage(fileBuffer);
-    await image.encode({ mozjpeg: {} });
-    const { binary } = await image.encodedWith.mozjpeg;
-    return Buffer.from(binary);
-  } finally {
-    await pool.close();
-  }
+  const image = await Image.fromBuffer(fileBuffer);
+  const jpeg = await image.encode({ format: "jpeg", quality: 90 });
+  return Buffer.from(jpeg);
 }
 
 async function ensurePdf(filePath) {
