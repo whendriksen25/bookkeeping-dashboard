@@ -69,9 +69,13 @@ function summarizeForAI(structured) {
 
 async function convertHeicToJpeg(filePath) {
   const fileBuffer = await fs.promises.readFile(filePath);
-  const image = await Image.fromBuffer(fileBuffer);
-  const jpeg = await image.encode({ format: "jpeg", quality: 90 });
-  return Buffer.from(jpeg);
+  const image = await Image.decode(fileBuffer);
+  try {
+    const jpegData = await image.encode({ format: "jpeg", quality: 90 });
+    return Buffer.isBuffer(jpegData) ? jpegData : Buffer.from(jpegData);
+  } finally {
+    if (typeof image.free === "function") image.free();
+  }
 }
 
 async function ensurePdf(filePath) {
