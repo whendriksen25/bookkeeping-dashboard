@@ -4,9 +4,6 @@ import path from "path";
 import os from "os";
 import OpenAI from "openai";
 import { Pool } from "pg";
-import { PDFDocument } from "pdf-lib";
-import sharp from "sharp";
-import { Image } from "@napi-rs/image";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -20,6 +17,41 @@ const pool =
         password: process.env.PGPASSWORD || "",
         database: process.env.PGDATABASE || "bookkeeping",
       });
+
+const INVOICE_PROMPT = `
+Je bent een Nederlandse boekhoudassistent. Lees de aangeleverde factuur of kassabon en geef ALLE onderstaande velden exact in JSON terug (en niets anders):
+
+{
+  "factuurdetails": {
+    "afzender": {"naam":"","adres":"","kvk_nummer":"","btw_nummer":"","email":"","telefoon":""},
+    "ontvanger": {"naam":"","adres":"","kvk_nummer":"","btw_nummer":"","email":"","telefoon":""},
+    "factuurnummer":"",
+    "factuurdatum":"",
+    "vervaldatum":"",
+    "betaalstatus":"betaald|onbetaald|onbekend",
+    "totaal":{"valuta":"","totaal_excl_btw":"","btw":"","totaal_incl_btw":""},
+    "regels":[
+      {"omschrijving":"","aantal":"","eenheid":"","bedrag_excl":"","btw_perc":"","bedrag_incl":""}
+    ],
+    "opmerkingen":""
+  },
+  "boekhoudcategorie_suggesties":[
+    {"naam":"","uitleg":"","kans":0.0},
+    {"naam":"","uitleg":"","kans":0.0},
+    {"naam":"","uitleg":"","kans":0.0},
+    {"naam":"","uitleg":"","kans":0.0},
+    {"naam":"","uitleg":"","kans":0.0}
+  ],
+  "alternatieve_zoekwoorden":["",""],
+  "ruwe_tekst":""
+}
+
+Regels:
+- Vul velden zo compleet mogelijk.
+- "ruwe_tekst" bevat de volledige relevante tekst uit de factuur/bon (zoveel mogelijk).
+- "boekhoudcategorie_suggesties": noem concrete Nederlandse grootboekcategorie-benamingen (zoals "Telefoonkosten", "Internetkosten", "Abonnementsgelden", "Kantoorkosten"), met korte uitleg en kans 0..1.
+- Antwoord ALLEEN met JSON (geen uitleg, geen markdown, geen backticks).
+`;
 
 // ---------- Helpers ----------
 function stripCodeFence(s) {
@@ -65,140 +97,6 @@ function summarizeForAI(structured) {
     `Totaal excl: ${t.totaal_excl_btw ?? ""}, BTW: ${t.btw ?? ""}, Totaal incl: ${t.totaal_incl_btw ?? ""}`,
     `Regels: ${regels}`,
   ].join("\n");
-}
-
-async function convertHeicToJpeg(filePath) {
-  const fileBuffer = await fs.promises.readFile(filePath);
-  const image = await Image.decode(fileBuffer);
-  try {
-    const jpegData = await image.encode({ format: "jpeg", quality: 90 });
-    return Buffer.isBuffer(jpegData) ? jpegData : Buffer.from(jpegData);
-  } finally {
-    if (typeof image.free === "function") image.free();
-  }
-}
-
-async function ensurePdf(filePath) {
-  const ext = path.extname(filePath || "").toLowerCase();
-  if (ext === ".pdf") {
-    return { pdfPath: filePath, cleanup: null };
-  }
-
-  let buffer;
-  let format;
-
-  if (ext === ".png") {
-    buffer = await sharp(filePath).withMetadata().png().toBuffer();
-    format = "png";
-  } else if (ext === ".jpg" || ext === ".jpeg") {
-    buffer = await sharp(filePath).withMetadata().jpeg().toBuffer();
-    format = "jpg";
-  } else if (ext === ".heic" || ext === ".heif" || ext === ".heics") {
-    buffer = await convertHeicToJpeg(filePath);
-    format = "jpg";
-  } else {
-    throw new Error(`Unsupported file type: ${ext || "unknown"}`);
-  }
-
-  const pdfDoc = await PDFDocument.create();
-  const embedded =
-    format === "png" ? await pdfDoc.embedPng(buffer) : await pdfDoc.embedJpg(buffer);
-
-  const page = pdfDoc.addPage([embedded.width, embedded.height]);
-  page.drawImage(embedded, {
-    x: 0,
-    y: 0,
-    width: embedded.width,
-    height: embedded.height,
-  });
-
-  const pdfBytes = await pdfDoc.save();
-  const tmpPdfPath = path.join(os.tmpdir(), `invoice-${Date.now()}.pdf`);
-  await fs.promises.writeFile(tmpPdfPath, pdfBytes);
-
-  return {
-    pdfPath: tmpPdfPath,
-    cleanup: async () => {
-      try {
-        await fs.promises.unlink(tmpPdfPath);
-      } catch (err) {
-        console.warn("[analyze] Failed to cleanup temp pdf", err?.message);
-      }
-    },
-  };
-}
-
-async function extractInvoiceWithAI(localPath) {
-  const { pdfPath, cleanup } = await ensurePdf(localPath);
-  try {
-    const file = await client.files.create({
-      file: fs.createReadStream(pdfPath),
-      purpose: "assistants",
-    });
-
-    const prompt = `
-Je bent een Nederlandse boekhoudassistent. Lees de bijgevoegde factuur (PDF/beeld) en geef ALLE onderstaande velden exact in JSON terug (en niets anders):
-
-{
-  "factuurdetails": {
-    "afzender": {"naam":"","adres":"","kvk_nummer":"","btw_nummer":"","email":"","telefoon":""},
-    "ontvanger": {"naam":"","adres":"","kvk_nummer":"","btw_nummer":"","email":"","telefoon":""},
-    "factuurnummer":"",
-    "factuurdatum":"",
-    "vervaldatum":"",
-    "betaalstatus":"betaald|onbetaald|onbekend",
-    "totaal":{"valuta":"","totaal_excl_btw":"","btw":"","totaal_incl_btw":""},
-    "regels":[
-      {"omschrijving":"","aantal":"","eenheid":"","bedrag_excl":"","btw_perc":"","bedrag_incl":""}
-    ],
-    "opmerkingen":""
-  },
-  "boekhoudcategorie_suggesties":[
-    {"naam":"","uitleg":"","kans":0.0},
-    {"naam":"","uitleg":"","kans":0.0},
-    {"naam":"","uitleg":"","kans":0.0},
-    {"naam":"","uitleg":"","kans":0.0},
-    {"naam":"","uitleg":"","kans":0.0}
-  ],
-  "alternatieve_zoekwoorden":["",""],
-  "ruwe_tekst":""
-}
-
-Regels:
-- Vul velden zo compleet mogelijk.
-- "ruwe_tekst" bevat de volledige relevante tekst uit de factuur (zoveel mogelijk).
-- "boekhoudcategorie_suggesties": noem concrete Nederlandse grootboekcategorie-benamingen (bijv. "Telefoonkosten", "Internetkosten", "Abonnementsgelden", "Kantoorkosten"), met korte uitleg en kans 0..1.
-- Antwoord met ALLEEN JSON (geen uitleg, geen markdown, geen backticks).
-`;
-
-    const resp = await client.responses.create({
-      model: "gpt-4o-mini",
-      input: [
-        {
-          role: "user",
-          content: [
-            { type: "input_text", text: prompt },
-            { type: "input_file", file_id: file.id },
-          ],
-        },
-      ],
-      temperature: 0,
-    });
-
-    let text = "";
-    try {
-      const blocks = resp.output?.[0]?.content || [];
-      const textBlocks = blocks.filter((b) => b.type === "output_text");
-      text = textBlocks.map((b) => b.text).join("\n").trim();
-    } catch {
-      text = resp.choices?.[0]?.message?.content || "";
-    }
-
-    const parsed = safeParseJSON(text);
-    return { rawText: text, structured: parsed };
-  } finally {
-    await cleanup?.();
-  }
 }
 
 function pickKeywordsFromAI(structured) {
@@ -313,15 +211,68 @@ JSON:
   return parsed;
 }
 
+function isPdf(filename) {
+  return /.pdf$/i.test(filename || "");
+}
+
+async function extractWithFile(localPath) {
+  const upload = await client.files.create({
+    file: fs.createReadStream(localPath),
+    purpose: "assistants",
+  });
+
+  const resp = await client.responses.create({
+    model: "gpt-4o-mini",
+    input: [
+      {
+        role: "user",
+        content: [
+          { type: "input_text", text: INVOICE_PROMPT },
+          { type: "input_file", file_id: upload.id },
+        ],
+      },
+    ],
+    temperature: 0,
+  });
+
+  const blocks = resp.output?.[0]?.content || [];
+  const text = blocks
+    .filter((b) => b.type === "output_text")
+    .map((b) => b.text)
+    .join("\n")
+    .trim();
+  return { rawText: text, structured: safeParseJSON(text) };
+}
+
+async function extractWithImageUrl(imageUrl) {
+  const resp = await client.responses.create({
+    model: "gpt-4o",
+    input: [
+      {
+        role: "user",
+        content: [
+          { type: "input_text", text: INVOICE_PROMPT },
+          { type: "input_image", image_url: imageUrl },
+        ],
+      },
+    ],
+    temperature: 0,
+  });
+
+  const blocks = resp.output?.[0]?.content || [];
+  const text = blocks
+    .filter((b) => b.type === "output_text")
+    .map((b) => b.text)
+    .join("\n")
+    .trim();
+  return { rawText: text, structured: safeParseJSON(text) };
+}
+
 // ---------- API handler ----------
 export default async function handler(req, res) {
-  let cleanupTmpFile = null;
+  let cleanupTmpDir = null;
 
   try {
-    console.log("[analyze] Incoming request", {
-      method: req.method,
-      headers: req.headers["content-type"],
-    });
     if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
     const { file } = req.body || {};
@@ -329,27 +280,19 @@ export default async function handler(req, res) {
     const filename = file?.filename;
     const fileUrl = file?.url;
 
-    if (!filename && !fileUrl) {
-      return res.status(400).json({ error: "filename or url missing" });
-    }
+    if (!filename) return res.status(400).json({ error: "filename missing" });
 
     let localPath = "";
-
-    if (storage === "blob") {
-      if (!fileUrl) return res.status(400).json({ error: "blob url missing" });
+    if (storage === "blob" && fileUrl) {
       const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "invoice-"));
-      const ext =
-        path.extname(filename || "") || path.extname(new URL(fileUrl).pathname || "");
+      const ext = path.extname(filename || "") || path.extname(new URL(fileUrl).pathname || "");
       const tmpPath = path.join(tmpDir, `${Date.now()}${ext || ""}`);
-      console.log("[analyze] Downloading blob to temp file", { fileUrl, tmpPath });
       const resp = await fetch(fileUrl);
-      if (!resp.ok) {
-        throw new Error(`Failed to download blob (${resp.status})`);
-      }
+      if (!resp.ok) throw new Error(`Failed to download blob (${resp.status})`);
       const arrayBuffer = await resp.arrayBuffer();
       await fs.promises.writeFile(tmpPath, Buffer.from(arrayBuffer));
       localPath = tmpPath;
-      cleanupTmpFile = async () => {
+      cleanupTmpDir = async () => {
         try {
           await fs.promises.rm(tmpDir, { recursive: true, force: true });
         } catch (cleanupErr) {
@@ -363,35 +306,25 @@ export default async function handler(req, res) {
       }
     }
 
-    console.log("📥 Analyze triggered for file:", { filename, storage });
+    const useFileUpload = isPdf(filename) || storage !== "blob";
 
-    const { rawText, structured } = await extractInvoiceWithAI(localPath);
-    console.log("[analyze] Extraction finished", {
-      hasStructured: Boolean(structured),
-      hasRawText: Boolean(rawText),
-      suggestions: structured?.boekhoudcategorie_suggesties?.length || 0,
-    });
+    let extraction;
+    if (useFileUpload) {
+      extraction = await extractWithFile(localPath);
+    } else if (fileUrl) {
+      extraction = await extractWithImageUrl(fileUrl);
+    } else {
+      throw new Error("No accessible URL for image analysis");
+    }
+
+    const { rawText, structured } = extraction;
 
     const aiKeywords = pickKeywordsFromAI(structured);
     const fallbackKw = ["telecommunicatie", "internet", "abonnement", "hosting", "kantoorkosten"];
     const keywords = (aiKeywords.length ? aiKeywords : fallbackKw).map((s) => s.toLowerCase());
-    console.log("[analyze] Keywords chosen", {
-      aiSuggested: aiKeywords,
-      usingFallback: aiKeywords.length === 0,
-      final: keywords,
-    });
 
     const candidates = await fetchCoaLeafCandidates(keywords);
-    console.log("[analyze] DB candidates fetched", {
-      keywordCount: keywords.length,
-      candidateCount: candidates.length,
-    });
-
     const aiRanking = await rankDbCandidatesWithAI(structured, candidates);
-    console.log("[analyze] AI ranking ready", {
-      keuze: aiRanking?.keuze_nummer,
-      scoreKeys: aiRanking?.scores ? Object.keys(aiRanking.scores).length : 0,
-    });
 
     res.status(200).json({
       invoice_text: structured?.ruwe_tekst || rawText || "",
@@ -400,13 +333,14 @@ export default async function handler(req, res) {
       ai_keywords_used: keywords,
       db_candidates: candidates,
       ai_ranking: aiRanking,
+      structured,
     });
   } catch (err) {
     console.error("❌ Error in analyze:", err);
     res.status(500).json({ error: err.message });
   } finally {
-    if (cleanupTmpFile) {
-      await cleanupTmpFile();
+    if (cleanupTmpDir) {
+      await cleanupTmpDir();
     }
   }
 }
