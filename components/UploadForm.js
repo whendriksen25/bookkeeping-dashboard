@@ -1,6 +1,5 @@
 // components/UploadForm.js
-import { useState, useMemo } from "react";
-import heic2any from "heic2any";
+import { useState, useMemo, useRef } from "react";
 
 export default function UploadForm({ onAnalyze }) {
   const [file, setFile] = useState(null);
@@ -19,6 +18,16 @@ export default function UploadForm({ onAnalyze }) {
     return best;
   }, [data]);
 
+  const heicConverterRef = useRef(null);
+
+  async function getHeicConverter() {
+    if (typeof window === "undefined") return null;
+    if (heicConverterRef.current) return heicConverterRef.current;
+    const mod = await import("heic2any");
+    heicConverterRef.current = mod.default || mod;
+    return heicConverterRef.current;
+  }
+
   async function convertHeicIfNeeded(originalFile) {
     if (!originalFile) return null;
     const type = (originalFile.type || "").toLowerCase();
@@ -27,6 +36,8 @@ export default function UploadForm({ onAnalyze }) {
     if (!isHeic) return originalFile;
 
     try {
+      const heic2any = await getHeicConverter();
+      if (!heic2any) return originalFile;
       const convertedBlob = await heic2any({ blob: originalFile, toType: "image/jpeg", quality: 0.92 });
       const jpegFile = new File([convertedBlob], originalFile.name.replace(/\.hei[cf]$/i, ".jpg"), {
         type: "image/jpeg",
