@@ -4,6 +4,7 @@ import path from "path";
 import os from "os";
 import OpenAI from "openai";
 import { Pool } from "pg";
+import crypto from "crypto";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -123,11 +124,30 @@ async function convertHeicViaCloudinary(sourceUrl) {
   }
 
   const endpoint = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
+  const timestamp = Math.floor(Date.now() / 1000);
+  const publicId = `heic_${Date.now()}`;
+  const folder = process.env.CLOUDINARY_FOLDER;
+
+  const signatureParams = [];
+  if (folder) signatureParams.push(`folder=${folder}`);
+  signatureParams.push(`format=jpg`);
+  signatureParams.push(`public_id=${publicId}`);
+  signatureParams.push(`timestamp=${timestamp}`);
+  const signatureBase = signatureParams.sort().join("&") + apiSecret;
+
+  const signature = crypto
+    .createHash("sha1")
+    .update(signatureBase)
+    .digest("hex");
+
   const params = new URLSearchParams({
     file: sourceUrl,
     format: "jpg",
     resource_type: "image",
-    public_id: `heic_${Date.now()}`,
+    public_id: publicId,
+    timestamp: String(timestamp),
+    signature,
+    api_key: apiKey,
   });
   const folder = process.env.CLOUDINARY_FOLDER;
   if (folder) params.append("folder", folder);
@@ -135,7 +155,6 @@ async function convertHeicViaCloudinary(sourceUrl) {
   const resp = await fetch(endpoint, {
     method: "POST",
     headers: {
-      Authorization: `Basic ${Buffer.from(`${apiKey}:${apiSecret}`).toString("base64")}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body: params.toString(),
