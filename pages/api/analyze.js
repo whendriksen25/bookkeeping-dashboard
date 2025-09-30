@@ -149,7 +149,6 @@ async function convertHeicViaCloudinary(sourceUrl) {
     signature,
     api_key: apiKey,
   });
-  const folder = process.env.CLOUDINARY_FOLDER;
   if (folder) params.append("folder", folder);
 
   const resp = await fetch(endpoint, {
