@@ -11,7 +11,6 @@
     "sync-coa": "node scripts/syncCOA.js"
   },
   "dependencies": {
-    "@squoosh/lib": "^0.3.1",
     "@vercel/blob": "^0.22.3",
     "heic2any": "^0.0.4",
     "dotenv": "^17.2.2",

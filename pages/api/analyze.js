@@ -114,6 +114,45 @@ function pickKeywordsFromAI(structured) {
   return [...new Set(list.map((x) => String(x).toLowerCase()))].slice(0, 8);
 }
 
+async function convertHeicViaCloudinary(sourceUrl) {
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  const apiKey = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+  if (!cloudName || !apiKey || !apiSecret) {
+    throw new Error("Cloudinary credentials missing (CLOUDINARY_CLOUD_NAME/KEY/SECRET)");
+  }
+
+  const endpoint = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
+  const params = new URLSearchParams({
+    file: sourceUrl,
+    format: "jpg",
+    resource_type: "image",
+    public_id: `heic_${Date.now()}`,
+  });
+  const folder = process.env.CLOUDINARY_FOLDER;
+  if (folder) params.append("folder", folder);
+
+  const resp = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${apiKey}:${apiSecret}`).toString("base64")}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: params.toString(),
+  });
+
+  const payload = await resp.json();
+  if (!resp.ok) {
+    const message = payload?.error?.message || `Cloudinary conversion failed (${resp.status})`;
+    throw new Error(message);
+  }
+
+  if (!payload?.secure_url) {
+    throw new Error("Cloudinary response missing secure_url");
+  }
+  return payload.secure_url;
+}
+
 async function fetchCoaLeafCandidates(keywords) {
   if (!keywords?.length) return [];
 
@@ -306,13 +345,22 @@ export default async function handler(req, res) {
       }
     }
 
+    const ext = path.extname(filename || "").toLowerCase();
     const useFileUpload = isPdf(filename) || storage !== "blob";
+    let imageUrlForAI = fileUrl;
+
+    if (!useFileUpload && imageUrlForAI) {
+      const isHeic = [".heic", ".heif", ".heics"].includes(ext);
+      if (isHeic) {
+        imageUrlForAI = await convertHeicViaCloudinary(imageUrlForAI);
+      }
+    }
 
     let extraction;
     if (useFileUpload) {
       extraction = await extractWithFile(localPath);
-    } else if (fileUrl) {
-      extraction = await extractWithImageUrl(fileUrl);
+    } else if (imageUrlForAI) {
+      extraction = await extractWithImageUrl(imageUrlForAI);
     } else {
       throw new Error("No accessible URL for image analysis");
     }

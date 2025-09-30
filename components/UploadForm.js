@@ -1,5 +1,5 @@
 // components/UploadForm.js
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo } from "react";
 
 export default function UploadForm({ onAnalyze }) {
   const [file, setFile] = useState(null);
@@ -18,52 +18,14 @@ export default function UploadForm({ onAnalyze }) {
     return best;
   }, [data]);
 
-  const heicConverterRef = useRef(null);
-
-  async function getHeicConverter() {
-    if (typeof window === "undefined") return null;
-    if (heicConverterRef.current) return heicConverterRef.current;
-    const mod = await import("heic2any");
-    heicConverterRef.current = mod.default || mod;
-    return heicConverterRef.current;
-  }
-
-  async function convertHeicIfNeeded(originalFile) {
-    if (!originalFile) return null;
-    const type = (originalFile.type || "").toLowerCase();
-    const name = (originalFile.name || "").toLowerCase();
-    const isHeic = type === "image/heic" || type === "image/heif" || name.endsWith(".heic") || name.endsWith(".heif");
-    if (!isHeic) return originalFile;
-
-    try {
-      const heic2any = await getHeicConverter();
-      if (!heic2any) return originalFile;
-      const convertedBlob = await heic2any({ blob: originalFile, toType: "image/jpeg", quality: 0.92 });
-      const jpegFile = new File([convertedBlob], originalFile.name.replace(/\.hei[cf]$/i, ".jpg"), {
-        type: "image/jpeg",
-        lastModified: Date.now(),
-      });
-      return jpegFile;
-    } catch (err) {
-      console.error("HEIC conversion failed", err);
-      return originalFile; // fallback
-    }
-  }
-
   async function handleSubmit(e) {
     e.preventDefault();
     if (!file) return;
     setLoading(true);
 
-    const uploadFile = await convertHeicIfNeeded(file);
-    if (!uploadFile) {
-      setLoading(false);
-      return;
-    }
-
     // 1) upload
     const formData = new FormData();
-    formData.append("file", uploadFile);
+    formData.append("file", file);
     const up = await fetch("/api/upload", { method: "POST", body: formData });
     if (!up.ok) {
       setLoading(false);
