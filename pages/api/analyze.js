@@ -133,7 +133,7 @@ Belangrijk:
 - Leg vast wanneer mogelijk: "aankoop_tijd" (bon tijdstip) en "betaal_tijd" (indien afzonderlijk vermeld). Laat leeg als onbekend.
 - "herberekende_totalen" moeten worden afgeleid uit de regels. Zet "komt_overeen_met_ticket" op false en vul "verschil" in wanneer de herberekende totalen afwijken of de ticket-bedragen niet leesbaar zijn.
 - "btw_bedrag" per regel is de totale btw voor die regel.
-- Gebruik in "boekhoudcategorie_suggesties" bij voorkeur officiële RGS-/grootboekbenamingen (bijv. "Kosten inkoop handelsgoederen").
+- Gebruik in "boekhoudcategorie_suggesties" alleen officiële RGS-/grootboekbenamingen.
 - Retourneer alleen JSON, geen extra tekst of markdown.
 `;
 
@@ -299,6 +299,39 @@ function pickKeywordsFromAI(structured) {
   return fallbackKw;
 }
 
+function normalizeStructuredOutput(structured) {
+  if (!structured || typeof structured !== "object") return structured;
+  let cloned;
+  try {
+    cloned = JSON.parse(JSON.stringify(structured));
+  } catch {
+    return structured;
+  }
+
+  if (Array.isArray(cloned.boekhoudcategorie_suggesties)) {
+    const seen = new Set();
+    cloned.boekhoudcategorie_suggesties = cloned.boekhoudcategorie_suggesties
+      .map((s) => {
+        if (!s || typeof s !== "object") return null;
+        const name = (s.naam || "").trim();
+        if (!name) return null;
+        const key = name.toLowerCase();
+        if (seen.has(key)) return null;
+        seen.add(key);
+        // encourage descriptive explanation if missing
+        return {
+          naam: name,
+          uitleg: s.uitleg || "",
+          kans: typeof s.kans === "number" ? s.kans : 0,
+        };
+      })
+      .filter(Boolean)
+      .slice(0, 5);
+  }
+
+  return cloned;
+}
+
 async function convertHeicViaCloudinary(sourceUrl) {
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
   const apiKey = process.env.CLOUDINARY_API_KEY;
@@ -393,7 +426,7 @@ async function rankDbCandidatesWithAI(structured, candidates) {
 
   const invoiceSummary = summarizeForAI(structured);
 
-  const instructions = `
+    const instructions = `
 Je krijgt een factuursamenvatting (incl. productcategorieën, bedragen, betaalwijze en loyalty-info) en een lijst met COA (RGS 3.7) grootboekrekeningen (nummer + omschrijving).
 Kies de beste rekening voor het boeken van deze factuur, en geef ook kansen voor de overige opties.
 Let extra op de genoemde productcategorieën en de aard van de uitgaven.
@@ -590,22 +623,29 @@ export default async function handler(req, res) {
     }
 
     const { rawText, structured } = extraction;
+    const normalizedStructured = normalizeStructuredOutput(structured);
 
-    const aiKeywords = pickKeywordsFromAI(structured);
-    const fallbackKw = ["telecommunicatie", "internet", "abonnement", "hosting", "kantoorkosten"];
+    const aiKeywords = pickKeywordsFromAI(normalizedStructured);
+    const fallbackKw = [
+      "inkoop handelsgoederen",
+      "inkoop levensmiddelen",
+      "kostprijs verkopen",
+      "supermarkt",
+      "boodschappen",
+    ];
     const keywords = (aiKeywords.length ? aiKeywords : fallbackKw).map((s) => s.toLowerCase());
 
     const candidates = await fetchCoaLeafCandidates(keywords);
-    const aiRanking = await rankDbCandidatesWithAI(structured, candidates);
+    const aiRanking = await rankDbCandidatesWithAI(normalizedStructured, candidates);
 
     res.status(200).json({
       invoice_text: structured?.ruwe_tekst || rawText || "",
-      factuurdetails: structured?.factuurdetails || {},
-      ai_first_suggestions: structured?.boekhoudcategorie_suggesties || [],
+      factuurdetails: normalizedStructured?.factuurdetails || {},
+      ai_first_suggestions: normalizedStructured?.boekhoudcategorie_suggesties || [],
       ai_keywords_used: keywords,
       db_candidates: candidates,
       ai_ranking: aiRanking,
-      structured,
+      structured: normalizedStructured || structured,
     });
   } catch (err) {
     console.error("❌ Error in analyze:", err);
