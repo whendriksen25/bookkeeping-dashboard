@@ -134,6 +134,8 @@ Belangrijk:
 - "herberekende_totalen" moeten worden afgeleid uit de regels. Zet "komt_overeen_met_ticket" op false en vul "verschil" in wanneer de herberekende totalen afwijken of de ticket-bedragen niet leesbaar zijn.
 - "btw_bedrag" per regel is de totale btw voor die regel.
 - Gebruik in "boekhoudcategorie_suggesties" alleen officiële RGS-/grootboekbenamingen.
+- Neem ALLE regels op die op de bon staan, inclusief afzonderlijke tabellen/secties (bijv. meerdere maanden, eenmalige posten, kortingen). Voeg elke regel afzonderlijk toe zelfs wanneer de omschrijving hetzelfde is; gebruik het juiste aantal (ook decimalen zoals 0.21) en negatieve bedragen voor kortingen of credits.
+- Laat geen regels weg; als de bron secties bevat zoals "Maandelijkse kosten" voor verschillende periodes of een aparte kortingstabel, neem ze allemaal op met hun eigen aantallen en bedragen.
 - Retourneer alleen JSON, geen extra tekst of markdown.
 `;
 
