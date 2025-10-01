@@ -20,7 +20,7 @@ const pool =
       });
 
 const INVOICE_PROMPT = `
-Je bent een Nederlandse boekhoudassistent. Lees de aangeleverde factuur of kassabon en geef ALLE onderstaande velden exact in JSON terug (en niets anders):
+Je bent een Nederlandse boekhoudassistent. Analyseer de factuur of kassabon en retourneer ALLEEN JSON in exact onderstaand formaat.
 
 {
   "factuurdetails": {
@@ -30,11 +30,34 @@ Je bent een Nederlandse boekhoudassistent. Lees de aangeleverde factuur of kassa
     "factuurdatum":"",
     "vervaldatum":"",
     "betaalstatus":"betaald|onbetaald|onbekend",
-    "totaal":{"valuta":"","totaal_excl_btw":"","btw":"","totaal_incl_btw":""},
+    "betaling_methode":"",
+    "totaal":{
+      "valuta":"",
+      "totaal_excl_btw":"",
+      "btw":"",
+      "totaal_incl_btw":""
+    },
     "regels":[
-      {"omschrijving":"","aantal":"","eenheid":"","bedrag_excl":"","btw_perc":"","bedrag_incl":""}
+      {
+        "omschrijving":"",
+        "productcode":"",
+        "aantal":"",
+        "eenheid":"",
+        "prijs_per_eenheid_excl":"",
+        "totaal_excl":"",
+        "btw_percentage":"",
+        "btw_bedrag":"",
+        "totaal_incl":""
+      }
     ],
     "opmerkingen":""
+  },
+  "herberekende_totalen": {
+    "totaal_excl":"",
+    "totaal_btw":"",
+    "totaal_incl":"",
+    "komt_overeen_met_ticket": true,
+    "verschil": ""
   },
   "boekhoudcategorie_suggesties":[
     {"naam":"","uitleg":"","kans":0.0},
@@ -47,11 +70,12 @@ Je bent een Nederlandse boekhoudassistent. Lees de aangeleverde factuur of kassa
   "ruwe_tekst":""
 }
 
-Regels:
-- Vul velden zo compleet mogelijk.
-- "ruwe_tekst" bevat de volledige relevante tekst uit de factuur/bon (zoveel mogelijk).
-- "boekhoudcategorie_suggesties": noem concrete Nederlandse grootboekcategorie-benamingen (zoals "Telefoonkosten", "Internetkosten", "Abonnementsgelden", "Kantoorkosten"), met korte uitleg en kans 0..1.
-- Antwoord ALLEEN met JSON (geen uitleg, geen markdown, geen backticks).
+Belangrijk:
+- Vul alle waarden zo volledig mogelijk in; gebruik numerieke waardes zonder valuta-teken maar behoud decimalen met punt (bijv. 12.34).
+- Bepaal "productcode" vanuit barcode, artikelnummer of SKU indien zichtbaar; anders laat leeg.
+- "herberekende_totalen" moeten worden afgeleid uit de regels. Zet "komt_overeen_met_ticket" op false en vul "verschil" in wanneer de herberekende totalen afwijken of de ticket-bedragen niet leesbaar zijn.
+- "btw_bedrag" per regel is de totale btw voor die regel.
+- Retourneer alleen JSON, geen extra tekst of markdown.
 `;
 
 // ---------- Helpers ----------

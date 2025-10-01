@@ -67,6 +67,12 @@ export default function UploadForm({ onAnalyze }) {
     setLoading(false);
   }
 
+  const lineItems = Array.isArray(data?.factuurdetails?.regels)
+    ? data.factuurdetails.regels
+    : [];
+
+  const recalculated = data?.herberekende_totalen || {};
+
   return (
     <div className="bg-white shadow rounded p-6 space-y-6">
       <form onSubmit={handleSubmit} className="space-y-3">
@@ -143,30 +149,56 @@ export default function UploadForm({ onAnalyze }) {
                 <table className="w-full text-sm border rounded">
                   <thead className="bg-gray-100">
                     <tr>
+                      <th className="text-left p-2">Productcode</th>
                       <th className="text-left p-2">Omschrijving</th>
                       <th className="text-right p-2">Aantal</th>
                       <th className="text-left p-2">Eenheid</th>
-                      <th className="text-right p-2">Excl.</th>
+                      <th className="text-right p-2">Prijs excl.</th>
                       <th className="text-right p-2">BTW%</th>
-                      <th className="text-right p-2">Incl.</th>
+                      <th className="text-right p-2">BTW €</th>
+                      <th className="text-right p-2">Totaal excl.</th>
+                      <th className="text-right p-2">Totaal incl.</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {Array.isArray(data.factuurdetails?.regels) &&
-                      data.factuurdetails.regels.map((r, i) => (
+                    {lineItems.map((r, i) => {
+                      const productCode = r.productcode || r.product_code || "";
+                      const quantity = r.aantal ?? r.quantity ?? "";
+                      const unit = r.eenheid ?? r.unit ?? "";
+                      const unitPrice = r.prijs_per_eenheid_excl ?? r.prijs ?? r.unit_price_excl ?? r.prijs_excl ?? "";
+                      const vatPerc = r.btw_percentage ?? r.btw_perc ?? "";
+                      const vatAmount = r.btw_bedrag ?? r.vat_amount ?? "";
+                      const totalExcl = r.totaal_excl ?? r.bedrag_excl ?? "";
+                      const totalIncl = r.totaal_incl ?? r.bedrag_incl ?? "";
+                      return (
                         <tr key={i} className="border-t">
-                          <td className="p-2">{r.omschrijving ?? ""}</td>
-                          <td className="p-2 text-right">{r.aantal ?? ""}</td>
-                          <td className="p-2">{r.eenheid ?? ""}</td>
-                          <td className="p-2 text-right">{r.bedrag_excl ?? ""}</td>
-                          <td className="p-2 text-right">{r.btw_perc ?? ""}</td>
-                          <td className="p-2 text-right">{r.bedrag_incl ?? ""}</td>
+                          <td className="p-2">{productCode}</td>
+                          <td className="p-2">{r.omschrijving ?? r.description ?? ""}</td>
+                          <td className="p-2 text-right">{quantity}</td>
+                          <td className="p-2">{unit}</td>
+                          <td className="p-2 text-right">{unitPrice}</td>
+                          <td className="p-2 text-right">{vatPerc}</td>
+                          <td className="p-2 text-right">{vatAmount}</td>
+                          <td className="p-2 text-right">{totalExcl}</td>
+                          <td className="p-2 text-right">{totalIncl}</td>
                         </tr>
-                      ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             </div>
+            {recalculated && (recalculated.totaal_excl || recalculated.totaal_incl) && (
+              <div className="mt-2 text-sm text-gray-700">
+                <div className="font-medium">Herberekende totalen</div>
+                <div>Totaal excl.: {recalculated.totaal_excl ?? "-"}</div>
+                <div>Totaal btw: {recalculated.totaal_btw ?? "-"}</div>
+                <div>Totaal incl.: {recalculated.totaal_incl ?? "-"}</div>
+                {recalculated.komt_overeen_met_ticket === false && (
+                  <div className="text-red-600">Afwijking: {recalculated.verschil || "verschil gedetecteerd"}</div>
+                )}
+              </div>
+            )}
           </section>
 
           {/* RAW TEXT */}
