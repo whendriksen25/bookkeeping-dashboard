@@ -64,6 +64,22 @@ Je bent een Nederlandse boekhoudassistent. Analyseer de factuur of kassabon en r
     "aankoop_tijd":"",
     "betaal_tijd":"",
     "openingstijden":"",
+    "merchant_id":"",
+    "transactie_id":"",
+    "betaald_bedrag":"",
+    "betaal_referentie":"",
+    "loyalty": {
+      "bonuskaart_nummer":"",
+      "bonus_voordeel":"",
+      "bonus_box":"",
+      "spaaracties":[
+        {
+          "type":"",
+          "aantal":"",
+          "waarde":""
+        }
+      ]
+    },
     "totaal":{
       "valuta":"",
       "totaal_excl_btw":"",
@@ -77,6 +93,8 @@ Je bent een Nederlandse boekhoudassistent. Analyseer de factuur of kassabon en r
         "aantal":"",
         "eenheid":"",
         "prijs_per_eenheid_excl":"",
+        "categorie":"",
+        "subcategorie":"",
         "totaal_excl":"",
         "btw_percentage":"",
         "btw_bedrag":"",
@@ -106,6 +124,9 @@ Je bent een Nederlandse boekhoudassistent. Analyseer de factuur of kassabon en r
 Belangrijk:
 - Vul alle waarden zo volledig mogelijk in; gebruik numerieke waardes zonder valuta-teken maar behoud decimalen met punt (bijv. 12.34).
 - Bepaal "productcode" vanuit barcode, artikelnummer of SKU indien zichtbaar; anders laat leeg.
+- Noteer "categorie" en "subcategorie" voor elke regel. Gebruik brede supermarkt-categorieën (bijv. "Fruit", "Dairy", "Groente"), en een meer specifieke subcategorie (bijv. "Avocado", "Yoghurt"). Laat leeg als onbekend.
+- Leg naast Bonuskaart-nummer ook bonuskorting, Bonus Box-waarde en alle spaaracties vast in het "loyalty"-object; noteer voor spaaracties het type en de hoeveelheid/waarde.
+- Vul "merchant_id" en "transactie_id" indien zichtbaar (bijv. Handelsnummer, Transaction ID). Gebruik "betaald_bedrag" voor het werkelijk afgerekende bedrag en "betaal_referentie" voor traceerkodes zoals autorisatie- of kaartreferenties.
 - Noteer "kassier" en "kassa_terminal" indien vermeld.
 - Geef "openingstijden" als tekst indien ze op de bon staan.
 - Splits adressen in straat, huisnummer, postcode, plaats, regio/provincie/staat en land waar mogelijk; laat onbekende velden leeg. Vul daarnaast "adres_volledig" met de tekst exact zoals deze op de bon staat.
@@ -143,9 +164,31 @@ function summarizeForAI(structured) {
   const a = f.afzender || {};
   const b = f.ontvanger || {};
   const t = f.totaal || {};
+  const loyalty = f.loyalty || {};
+  const spaaracties = Array.isArray(loyalty.spaaracties)
+    ? loyalty.spaaracties
+        .map((s) => {
+          if (!s) return "";
+          const parts = [s.type, s.aantal, s.waarde].filter(Boolean);
+          return parts.join(" · ");
+        })
+        .filter(Boolean)
+        .join("; ")
+    : "";
+  const merchant = f.merchant_id || "";
+  const transaction = f.transactie_id || "";
+  const paid = f.betaald_bedrag || t.totaal_incl_btw || "";
+  const paymentRef = f.betaal_referentie || "";
+  const paymentMethod = f.betaling_methode || f.betalings_methode || "";
   const regels = Array.isArray(f.regels)
     ? f.regels
-        .map((r) => `${r.omschrijving ?? ""} x${r.aantal ?? ""} = ${r.totaal_incl ?? r.totaal_excl ?? r.bedrag ?? ""}`)
+        .map((r) => {
+          const base = `${r.omschrijving ?? ""} x${r.aantal ?? ""} = ${
+            r.totaal_incl ?? r.totaal_excl ?? r.bedrag ?? ""
+          }`;
+          const cat = [r.categorie, r.subcategorie].filter(Boolean).join(" / ");
+          return cat ? `${base} [${cat}]` : base;
+        })
         .join("; ")
     : "";
 
@@ -168,6 +211,8 @@ function summarizeForAI(structured) {
     `Ontvanger: ${b.naam ?? ""} ${formatAddress(b)} (KvK: ${b.kvk_nummer ?? ""}, BTW: ${b.btw_nummer ?? ""}, Email: ${b.email ?? ""}, Tel: ${b.telefoon ?? ""})`,
     `Factuur: #${f.factuurnummer ?? ""} d.d. ${f.factuurdatum ?? ""} vervaldatum ${f.vervaldatum ?? ""} aankoop_tijd ${f.aankoop_tijd ?? ``} betaal_tijd ${f.betaal_tijd ?? f.aankoop_tijd ?? ``}`,
     `Totaal excl: ${t.totaal_excl_btw ?? ""}, BTW: ${t.btw ?? ""}, Totaal incl: ${t.totaal_incl_btw ?? ""}`,
+    `Betaling: methode ${paymentMethod}, bedrag ${paid}, referentie ${paymentRef}, merchant ${merchant}, transactie ${transaction}`,
+    `Loyalty: Bonuskaart ${loyalty.bonuskaart_nummer ?? ""}, voordeel ${loyalty.bonus_voordeel ?? ""}, bonus_box ${loyalty.bonus_box ?? ""}, spaaracties ${spaaracties}`,
     `Regels: ${regels}`,
   ].join("\n");
 }

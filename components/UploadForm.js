@@ -78,6 +78,10 @@ export default function UploadForm({ onAnalyze }) {
   const recalculated = data?.herberekende_totalen || {};
   const sender = data?.factuurdetails?.afzender || {};
   const receiver = data?.factuurdetails?.ontvanger || {};
+  const loyalty = data?.factuurdetails?.loyalty || {};
+  const spaaracties = Array.isArray(loyalty.spaaracties)
+    ? loyalty.spaaracties.filter(Boolean)
+    : [];
 
   const formatAddress = (entity) => {
     if (!entity) return "";
@@ -165,6 +169,9 @@ export default function UploadForm({ onAnalyze }) {
                 <div>Betaalmethode: {data.factuurdetails?.betaling_methode || "-"}</div>
                 <div>Kassier: {data.factuurdetails?.kassier || "-"}</div>
                 <div>POS/Kassa: {data.factuurdetails?.kassa_terminal || "-"}</div>
+                <div>Merchant-ID: {data.factuurdetails?.merchant_id || "-"}</div>
+                <div>Transactie-ID: {data.factuurdetails?.transactie_id || "-"}</div>
+                <div>Betalingsref.: {data.factuurdetails?.betaal_referentie || "-"}</div>
                 <div>Aankoop tijd: {data.factuurdetails?.aankoop_tijd || "-"}</div>
                 <div>Betaal tijd: {data.factuurdetails?.betaal_tijd || data.factuurdetails?.aankoop_tijd || "-"}</div>
               </div>
@@ -173,10 +180,32 @@ export default function UploadForm({ onAnalyze }) {
                 <div>BTW: {data.factuurdetails?.totaal?.btw ?? "-"}</div>
                 <div>Totaal incl. BTW: {data.factuurdetails?.totaal?.totaal_incl_btw ?? "-"}</div>
                 <div>Valuta: {data.factuurdetails?.totaal?.valuta || "-"}</div>
+                <div>Betaald bedrag: {data.factuurdetails?.betaald_bedrag || data.factuurdetails?.totaal?.totaal_incl_btw || "-"}</div>
               </div>
               <div className="border rounded p-3">
                 <div>Opmerkingen: {data.factuurdetails?.opmerkingen || "-"}</div>
                 <div>Openingstijden: {data.factuurdetails?.openingstijden || "-"}</div>
+              </div>
+            </div>
+
+            {/* Loyalty */}
+            <div className="border rounded p-3 text-sm mt-3 space-y-1">
+              <h3 className="font-medium">Loyalty &amp; Kortingen</h3>
+              <div>Bonuskaart: {loyalty.bonuskaart_nummer || "-"}</div>
+              <div>Bonus voordeel: {loyalty.bonus_voordeel || "-"}</div>
+              <div>Bonus Box: {loyalty.bonus_box || "-"}</div>
+              <div>
+                Spaaracties:
+                {spaaracties.length === 0 ? (
+                  <span className="ml-1">-</span>
+                ) : (
+                  <ul className="list-disc list-inside">
+                    {spaaracties.map((s, idx) => {
+                      const parts = [s.type, s.aantal, s.waarde].filter(Boolean).join(" · ");
+                      return <li key={idx}>{parts || "-"}</li>;
+                    })}
+                  </ul>
+                )}
               </div>
             </div>
 
@@ -189,6 +218,8 @@ export default function UploadForm({ onAnalyze }) {
                     <tr>
                       <th className="text-left p-2">Productcode</th>
                       <th className="text-left p-2">Omschrijving</th>
+                      <th className="text-left p-2">Categorie</th>
+                      <th className="text-left p-2">Subcategorie</th>
                       <th className="text-right p-2">Aantal</th>
                       <th className="text-left p-2">Eenheid</th>
                       <th className="text-right p-2">Prijs excl.</th>
@@ -208,10 +239,14 @@ export default function UploadForm({ onAnalyze }) {
                       const vatAmount = r.btw_bedrag ?? r.vat_amount ?? "";
                       const totalExcl = r.totaal_excl ?? r.bedrag_excl ?? "";
                       const totalIncl = r.totaal_incl ?? r.bedrag_incl ?? "";
+                      const category = r.categorie ?? r.category ?? "";
+                      const subcategory = r.subcategorie ?? r.subcategory ?? "";
                       return (
                         <tr key={i} className="border-t">
                           <td className="p-2">{productCode}</td>
                           <td className="p-2">{r.omschrijving ?? r.description ?? ""}</td>
+                          <td className="p-2">{category}</td>
+                          <td className="p-2">{subcategory}</td>
                           <td className="p-2 text-right">{quantity}</td>
                           <td className="p-2">{unit}</td>
                           <td className="p-2 text-right">{unitPrice}</td>
