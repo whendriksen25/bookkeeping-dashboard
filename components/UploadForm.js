@@ -1,12 +1,20 @@
 // components/UploadForm.js
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 
-export default function UploadForm({ onAnalyze }) {
+export default function UploadForm({
+  onAnalyze,
+  profiles = [],
+  profilesLoaded = false,
+  onProfilesChange,
+}) {
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
   const [selectedNumber, setSelectedNumber] = useState("");
   const [extraInfo, setExtraInfo] = useState("");
+  const [selectedProfileId, setSelectedProfileId] = useState("");
+  const [splitMode, setSplitMode] = useState(false);
+  const [lineAssignments, setLineAssignments] = useState([]);
 
   const topChoice = useMemo(() => {
     if (!data?.ai_ranking?.scores) return null;
@@ -53,6 +61,19 @@ export default function UploadForm({ onAnalyze }) {
     }
     const azData = await az.json();
     setData(azData);
+    if (Array.isArray(azData.profiles) && typeof onProfilesChange === "function") {
+      onProfilesChange(azData.profiles);
+    }
+
+    const suggestedProfile = azData?.profile_suggestion?.profileId
+      ? String(azData.profile_suggestion.profileId)
+      : "";
+    setSelectedProfileId(suggestedProfile);
+    const defaultAssignments = Array.isArray(azData?.factuurdetails?.regels)
+      ? azData.factuurdetails.regels.map(() => suggestedProfile)
+      : [];
+    setLineAssignments(defaultAssignments);
+    setSplitMode(false);
     if (typeof onAnalyze === "function") {
       try {
         onAnalyze(azData);
@@ -81,6 +102,76 @@ export default function UploadForm({ onAnalyze }) {
   const loyalty = data?.factuurdetails?.loyalty || {};
   const spaaracties = Array.isArray(loyalty.spaaracties)
     ? loyalty.spaaracties.filter(Boolean)
+    : [];
+  const profileSuggestion = data?.profile_suggestion || null;
+  const rankedProfiles = Array.isArray(profileSuggestion?.ranked)
+    ? profileSuggestion.ranked
+    : [];
+  const selectedProfile = profiles.find((p) => String(p.id) === selectedProfileId);
+  useEffect(() => {
+    if (!splitMode) {
+      setLineAssignments((prev) => {
+        if (!lineItems.length) return [];
+        const fallback = selectedProfileId || "";
+        if (prev.length === lineItems.length) {
+          return prev.map(() => fallback);
+        }
+        return lineItems.map(() => fallback);
+      });
+    }
+  }, [selectedProfileId, splitMode, lineItems.length]);
+
+  useEffect(() => {
+    if (!splitMode && lineItems.length && lineAssignments.length !== lineItems.length) {
+      setLineAssignments(lineItems.map(() => selectedProfileId || ""));
+    }
+  }, [lineItems.length, splitMode, lineAssignments.length, selectedProfileId]);
+
+  const handleToggleSplit = () => {
+    if (!profiles.length) return;
+    setSplitMode((prev) => !prev);
+    if (!splitMode && lineAssignments.length !== lineItems.length) {
+      setLineAssignments(lineItems.map(() => selectedProfileId || ""));
+    }
+  };
+
+  const handleLineAssignmentChange = (index, value) => {
+    setLineAssignments((prev) => {
+      const next = [...prev];
+      next[index] = value;
+      return next;
+    });
+  };
+
+  const handleApplyProfileToAll = () => {
+    setLineAssignments(lineItems.map(() => selectedProfileId || ""));
+  };
+
+  const parseAmount = (input) => {
+    if (input === null || input === undefined) return 0;
+    const normalized = String(input).replace(/[^0-9,.-]/g, "").replace(",", ".");
+    const num = Number(normalized);
+    return Number.isFinite(num) ? num : 0;
+  };
+
+  const splitSummaryEntries = splitMode
+    ? Object.values(
+        lineAssignments.reduce((acc, profileId, idx) => {
+          const key = profileId || "__none";
+          if (!acc[key]) {
+            const profileInfo = profiles.find((p) => String(p.id) === profileId);
+            acc[key] = {
+              profileId,
+              name: profileInfo?.name || (profileId ? `Profiel ${profileId}` : "Geen profiel"),
+              total: 0,
+              lines: 0,
+            };
+          }
+          acc[key].lines += 1;
+          acc[key].total += parseAmount(lineItems[idx]?.totaal_incl ?? lineItems[idx]?.totaal_excl ?? 0);
+          return acc;
+        }, {})
+      )
     : [];
 
   const formatAddress = (entity) => {
@@ -124,6 +215,84 @@ export default function UploadForm({ onAnalyze }) {
 
       {data && (
         <div className="space-y-6">
+          <section className="border rounded p-4 bg-gray-50 space-y-3">
+            <h2 className="text-lg font-semibold">📂 Profielkeuze</h2>
+            {!profilesLoaded ? (
+              <p className="text-sm text-gray-600">Profielen laden...</p>
+            ) : profiles.length === 0 ? (
+              <p className="text-sm text-gray-600">
+                Nog geen profielen beschikbaar. Voeg eerst een bedrijfs- of persoonlijk profiel toe zodat facturen gekoppeld kunnen worden.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {profileSuggestion && (
+                  <div className="text-sm text-gray-700">
+                    Aanbevolen profiel: {selectedProfile?.name || "(niet beschikbaar)"}
+                    {typeof profileSuggestion.confidence === "number" && (
+                      <span className="text-gray-500"> ({Math.round((profileSuggestion.confidence ?? 0) * 100)}% zeker)</span>
+                    )}
+                    {profileSuggestion.reason && (
+                      <p className="text-xs text-gray-500 mt-1">{profileSuggestion.reason}</p>
+                    )}
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium mb-1">Koppel aan profiel</label>
+                  <select
+                    className="border rounded p-2 w-full"
+                    value={selectedProfileId}
+                    onChange={(e) => setSelectedProfileId(e.target.value)}
+                  >
+                    <option value="">— Kies profiel —</option>
+                    {profiles.map((p) => (
+                      <option key={p.id} value={String(p.id)}>
+                        {p.name} ({p.type})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {profiles.length > 1 && (
+                  <div className="flex flex-wrap items-center gap-3 text-sm">
+                    <span>Bon splitsen over meerdere profielen?</span>
+                    <button
+                      type="button"
+                      onClick={handleToggleSplit}
+                      disabled={!lineItems.length}
+                      className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50"
+                    >
+                      {splitMode ? "Splitsen annuleren" : "Start splitsen"}
+                    </button>
+                    {splitMode && (
+                      <button
+                        type="button"
+                        onClick={handleApplyProfileToAll}
+                        className="px-3 py-1 bg-gray-100 rounded hover:bg-gray-200"
+                      >
+                        Zet alles op geselecteerd profiel
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {rankedProfiles.length > 0 && (
+                  <div className="text-xs text-gray-500 space-y-1">
+                    <div className="font-medium text-gray-600">AI-ranking</div>
+                    <ul className="list-disc list-inside space-y-1">
+                      {rankedProfiles.map((r) => (
+                        <li key={r.profileId}>
+                          {r.name || `Profiel ${r.profileId}`} – {Math.round((r.probability ?? 0) * 100)}%
+                          {r.reason ? ` • ${r.reason}` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+
           {/* FACTUURDETAILS */}
           <section>
             <h2 className="text-lg font-semibold mb-2">📑 Factuurdetails</h2>
@@ -218,6 +387,7 @@ export default function UploadForm({ onAnalyze }) {
                     <tr>
                       <th className="text-left p-2">Productcode</th>
                       <th className="text-left p-2">Omschrijving</th>
+                      {splitMode && <th className="text-left p-2">Profiel</th>}
                       <th className="text-left p-2">Categorie</th>
                       <th className="text-left p-2">Subcategorie</th>
                       <th className="text-right p-2">Aantal</th>
@@ -245,6 +415,22 @@ export default function UploadForm({ onAnalyze }) {
                         <tr key={i} className="border-t">
                           <td className="p-2">{productCode}</td>
                           <td className="p-2">{r.omschrijving ?? r.description ?? ""}</td>
+                          {splitMode && (
+                            <td className="p-2">
+                              <select
+                                className="border rounded p-1 text-sm"
+                                value={lineAssignments[i] || ""}
+                                onChange={(e) => handleLineAssignmentChange(i, e.target.value)}
+                              >
+                                <option value="">— kies profiel —</option>
+                                {profiles.map((p) => (
+                                  <option key={p.id} value={String(p.id)}>
+                                    {p.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                          )}
                           <td className="p-2">{category}</td>
                           <td className="p-2">{subcategory}</td>
                           <td className="p-2 text-right">{quantity}</td>
@@ -261,6 +447,23 @@ export default function UploadForm({ onAnalyze }) {
                 </table>
               </div>
             </div>
+            {splitMode && splitSummaryEntries.length > 0 && (
+              <div className="mt-2 text-sm text-gray-700">
+                <div className="font-medium">Verdeling</div>
+                <ul className="list-disc list-inside">
+                  {splitSummaryEntries.map((entry) => (
+                    <li key={entry.profileId || "__none"}>
+                      {entry.name}: {entry.lines} regel(s), €{entry.total.toFixed(2)}
+                    </li>
+                  ))}
+                </ul>
+                {splitSummaryEntries.some((entry) => !entry.profileId) && (
+                  <p className="text-xs text-red-600 mt-1">
+                    Let op: sommige regels zijn nog niet gekoppeld aan een profiel.
+                  </p>
+                )}
+              </div>
+            )}
             {recalculated && (recalculated.totaal_excl || recalculated.totaal_incl) && (
               <div className="mt-2 text-sm text-gray-700">
                 <div className="font-medium">Herberekende totalen</div>

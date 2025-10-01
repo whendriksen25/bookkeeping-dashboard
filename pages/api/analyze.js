@@ -5,6 +5,7 @@ import os from "os";
 import OpenAI from "openai";
 import { Pool } from "pg";
 import crypto from "crypto";
+import { listProfiles } from "../../lib/profiles.js";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -451,6 +452,108 @@ JSON:
   return parsed;
 }
 
+async function suggestProfileForInvoice(structured, profiles) {
+  if (!profiles?.length) return null;
+
+  const invoiceSummary = summarizeForAI(structured);
+  const profileLines = profiles
+    .map((p) => {
+      const lines = [
+        `- [${p.id}] ${p.name} (${p.type})`,
+      ];
+      if (p.website) lines.push(`  Website: ${p.website}`);
+      if (p.aiSummary) {
+        lines.push(`  Profiel: ${p.aiSummary}`);
+      } else if (p.description) {
+        lines.push(`  Beschrijving: ${p.description}`);
+      }
+      return lines.join("\n");
+    })
+    .join("\n");
+
+  const instructions = `
+Je krijgt een factuursamenvatting en een lijst met beschikbare profielen (bedrijven of personen).
+Kies het meest waarschijnlijke profiel waar deze factuur/bon bij hoort.
+Antwoord ALLEEN met JSON in dit formaat (geen markdown):
+
+{
+  "profile_id": <nummer of null>,
+  "confidence": 0.0,
+  "reason": "",
+  "scores": [
+    { "profile_id": <nummer>, "name": "", "probability": 0.0, "reason": "" }
+  ]
+}
+
+- probability ∈ [0,1] en som van alle scores ≈ 1.0
+- Als er geen passend profiel is, zet "profile_id" op null maar geef alsnog een rangorde in "scores".
+- Gebruik het profiel-ID exact zoals opgegeven in de lijst.
+`;
+
+  const message = `Factuur (samenvatting):\n${invoiceSummary}\n\nBeschikbare profielen:\n${profileLines}\n\nJSON:\n`;
+
+  try {
+    const resp = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0,
+      messages: [
+        { role: "system", content: "Je bent een nauwkeurige Nederlandse boekhoudassistent." },
+        { role: "user", content: instructions + message },
+      ],
+    });
+
+    const content = resp.choices?.[0]?.message?.content || "";
+    const parsed = safeParseJSON(content);
+    if (!parsed?.scores?.length) throw new Error("Scores ontbreken");
+
+    const toNumber = (value) => {
+      if (value === null || value === undefined) return null;
+      const num = Number(value);
+      return Number.isFinite(num) ? num : null;
+    };
+
+    const ranked = parsed.scores
+      .map((entry) => {
+        const profileId = toNumber(entry.profile_id ?? entry.id ?? entry.profileId ?? null);
+        if (profileId === null) return null;
+        const profile = profiles.find((p) => p.id === profileId);
+        return {
+          profileId,
+          name: profile?.name || entry.name || "",
+          probability: Number(entry.probability ?? 0),
+          reason: entry.reason || "",
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.probability - a.probability);
+
+    const top = ranked[0] || null;
+    return {
+      profileId: toNumber(parsed.profile_id) ?? top?.profileId ?? null,
+      confidence: Number(parsed.confidence ?? top?.probability ?? 0),
+      reason: parsed.reason || top?.reason || "",
+      ranked,
+    };
+  } catch (err) {
+    console.warn("[analyze] profile suggestion failed", err);
+    const fallback = profiles[0];
+    if (!fallback) return null;
+    return {
+      profileId: fallback.id,
+      confidence: 0.4,
+      reason: "Fallback (AI-profielselectie mislukt)",
+      ranked: [
+        {
+          profileId: fallback.id,
+          name: fallback.name,
+          probability: 0.4,
+          reason: "Fallback",
+        },
+      ],
+    };
+  }
+}
+
 function isPdf(filename) {
   return /.pdf$/i.test(filename || "");
 }
@@ -590,6 +693,9 @@ export default async function handler(req, res) {
     const { rawText, structured } = extraction;
     const normalizedStructured = normalizeStructuredOutput(structured);
 
+    const availableProfiles = await listProfiles();
+    const profileSuggestion = await suggestProfileForInvoice(normalizedStructured, availableProfiles);
+
     const aiKeywords = pickKeywordsFromAI(normalizedStructured);
     const fallbackKw = [
       "inkoop handelsgoederen",
@@ -610,6 +716,8 @@ export default async function handler(req, res) {
       ai_keywords_used: keywords,
       db_candidates: candidates,
       ai_ranking: aiRanking,
+      profile_suggestion: profileSuggestion,
+      profiles: availableProfiles,
       structured: normalizedStructured || structured,
     });
   } catch (err) {
