@@ -72,6 +72,22 @@ export default function UploadForm({ onAnalyze }) {
     : [];
 
   const recalculated = data?.herberekende_totalen || {};
+  const sender = data?.factuurdetails?.afzender || {};
+  const receiver = data?.factuurdetails?.ontvanger || {};
+
+  const formatAddress = (entity) => {
+    if (!entity) return "";
+    if (entity.adres_volledig) return entity.adres_volledig;
+    const parts = [
+      entity.straat,
+      entity.huisnummer,
+      entity.postcode,
+      entity.plaats,
+      entity.provincie_of_staat || entity.regio,
+      entity.land,
+    ].filter(Boolean);
+    return parts.join(" ") || entity.adres || "";
+  };
 
   return (
     <div className="bg-white shadow rounded p-6 space-y-6">
@@ -101,25 +117,30 @@ export default function UploadForm({ onAnalyze }) {
               {/* Afzender */}
               <div className="border rounded p-3">
                 <h3 className="font-medium mb-1">Afzender</h3>
-                <div>Naam: {data.factuurdetails?.afzender?.naam || "-"}</div>
-                <div>Adres: {data.factuurdetails?.afzender?.adres || "-"}</div>
-                <div>KvK: {data.factuurdetails?.afzender?.kvk_nummer || "-"}</div>
-                <div>BTW: {data.factuurdetails?.afzender?.btw_nummer || "-"}</div>
-                <div>Email: {data.factuurdetails?.afzender?.email || "-"}</div>
-                <div>Telefoon: {data.factuurdetails?.afzender?.telefoon || "-"}</div>
+                <div>Naam: {sender.naam || "-"}</div>
+                <div>Adres: {formatAddress(sender) || "-"}</div>
+                <div>Postcode/Plaats: {sender.postcode || "-"} {sender.plaats || ""}</div>
+                <div>Regio/Provincie: {sender.provincie_of_staat || sender.regio || "-"}</div>
+                <div>Land: {sender.land || "-"}</div>
+                <div>KvK: {sender.kvk_nummer || "-"}</div>
+                <div>BTW: {sender.btw_nummer || "-"}</div>
+                <div>Email: {sender.email || "-"}</div>
+                <div>Telefoon: {sender.telefoon || "-"}</div>
               </div>
 
               {/* Ontvanger */}
               <div className="border rounded p-3">
                 <h3 className="font-medium mb-1">Ontvanger</h3>
-                <div>Naam: {data.factuurdetails?.ontvanger?.naam || "-"}</div>
-                <div>Adres: {data.factuurdetails?.ontvanger?.adres || "-"}</div>
-                <div>KvK: {data.factuurdetails?.ontvanger?.kvk_nummer || "-"}</div>
-                <div>BTW: {data.factuurdetails?.ontvanger?.btw_nummer || "-"}</div>
-                <div>Klantnummer: {data.factuurdetails?.ontvanger?.klantnummer || "-"}</div>
-                <div>Debiteurnummer: {data.factuurdetails?.ontvanger?.debiteurnummer || "-"}</div>
-                <div>Email: {data.factuurdetails?.ontvanger?.email || "-"}</div>
-                <div>Telefoon: {data.factuurdetails?.ontvanger?.telefoon || "-"}</div>
+                <div>Naam: {receiver.naam || "-"}</div>
+                <div>Adres: {formatAddress(receiver) || "-"}</div>
+                <div>Postcode/Plaats: {receiver.postcode || "-"} {receiver.plaats || ""}</div>
+                <div>Regio/Provincie: {receiver.provincie_of_staat || receiver.regio || "-"}</div>
+                <div>Land: {receiver.land || "-"}</div>
+                <div>KvK: {receiver.kvk_nummer || "-"}</div>
+                <div>BTW: {receiver.btw_nummer || "-"}</div>
+                <div>Relatienummer: {receiver.klantnummer || receiver.debiteurnummer || "-"}</div>
+                <div>Email: {receiver.email || "-"}</div>
+                <div>Telefoon: {receiver.telefoon || "-"}</div>
               </div>
             </div>
 
@@ -130,6 +151,11 @@ export default function UploadForm({ onAnalyze }) {
                 <div>Datum: {data.factuurdetails?.factuurdatum || "-"}</div>
                 <div>Vervaldatum: {data.factuurdetails?.vervaldatum || "-"}</div>
                 <div>Betaalstatus: {data.factuurdetails?.betaalstatus || "-"}</div>
+                <div>Betaalmethode: {data.factuurdetails?.betaling_methode || "-"}</div>
+                <div>Kassier: {data.factuurdetails?.kassier || "-"}</div>
+                <div>POS/Kassa: {data.factuurdetails?.kassa_terminal || "-"}</div>
+                <div>Aankoop tijd: {data.factuurdetails?.aankoop_tijd || "-"}</div>
+                <div>Betaal tijd: {data.factuurdetails?.betaal_tijd || "-"}</div>
               </div>
               <div className="border rounded p-3">
                 <div>Totaal excl. BTW: {data.factuurdetails?.totaal?.totaal_excl_btw ?? "-"}</div>
@@ -139,6 +165,7 @@ export default function UploadForm({ onAnalyze }) {
               </div>
               <div className="border rounded p-3">
                 <div>Opmerkingen: {data.factuurdetails?.opmerkingen || "-"}</div>
+                <div>Openingstijden: {data.factuurdetails?.openingstijden || "-"}</div>
               </div>
             </div>
 

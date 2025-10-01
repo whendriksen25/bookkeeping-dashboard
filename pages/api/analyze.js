@@ -24,13 +24,46 @@ Je bent een Nederlandse boekhoudassistent. Analyseer de factuur of kassabon en r
 
 {
   "factuurdetails": {
-    "afzender": {"naam":"","adres":"","kvk_nummer":"","btw_nummer":"","email":"","telefoon":""},
-    "ontvanger": {"naam":"","adres":"","kvk_nummer":"","btw_nummer":"","email":"","telefoon":""},
+    "afzender": {
+      "naam":"",
+      "adres_volledig":"",
+      "straat":"",
+      "huisnummer":"",
+      "postcode":"",
+      "plaats":"",
+      "regio":"",
+      "provincie_of_staat":"",
+      "land":"",
+      "kvk_nummer":"",
+      "btw_nummer":"",
+      "email":"",
+      "telefoon":""
+    },
+    "ontvanger": {
+      "naam":"",
+      "adres_volledig":"",
+      "straat":"",
+      "huisnummer":"",
+      "postcode":"",
+      "plaats":"",
+      "regio":"",
+      "provincie_of_staat":"",
+      "land":"",
+      "kvk_nummer":"",
+      "btw_nummer":"",
+      "email":"",
+      "telefoon":""
+    },
     "factuurnummer":"",
     "factuurdatum":"",
     "vervaldatum":"",
     "betaalstatus":"betaald|onbetaald|onbekend",
     "betaling_methode":"",
+    "kassier":"",
+    "kassa_terminal":"",
+    "aankoop_tijd":"",
+    "betaal_tijd":"",
+    "openingstijden":"",
     "totaal":{
       "valuta":"",
       "totaal_excl_btw":"",
@@ -73,6 +106,10 @@ Je bent een Nederlandse boekhoudassistent. Analyseer de factuur of kassabon en r
 Belangrijk:
 - Vul alle waarden zo volledig mogelijk in; gebruik numerieke waardes zonder valuta-teken maar behoud decimalen met punt (bijv. 12.34).
 - Bepaal "productcode" vanuit barcode, artikelnummer of SKU indien zichtbaar; anders laat leeg.
+- Noteer "kassier" en "kassa_terminal" indien vermeld.
+- Geef "openingstijden" als tekst indien ze op de bon staan.
+- Splits adressen in straat, huisnummer, postcode, plaats, regio/provincie/staat en land waar mogelijk; laat onbekende velden leeg. Vul daarnaast "adres_volledig" met de tekst exact zoals deze op de bon staat.
+- Leg vast wanneer mogelijk: "aankoop_tijd" (bon tijdstip) en "betaal_tijd" (indien afzonderlijk vermeld). Laat leeg als onbekend.
 - "herberekende_totalen" moeten worden afgeleid uit de regels. Zet "komt_overeen_met_ticket" op false en vul "verschil" in wanneer de herberekende totalen afwijken of de ticket-bedragen niet leesbaar zijn.
 - "btw_bedrag" per regel is de totale btw voor die regel.
 - Retourneer alleen JSON, geen extra tekst of markdown.
@@ -108,17 +145,28 @@ function summarizeForAI(structured) {
   const t = f.totaal || {};
   const regels = Array.isArray(f.regels)
     ? f.regels
-        .map((r) => `${r.omschrijving ?? ""} x${r.aantal ?? ""} = ${r.bedrag ?? ""}`)
+        .map((r) => `${r.omschrijving ?? ""} x${r.aantal ?? ""} = ${r.totaal_incl ?? r.totaal_excl ?? r.bedrag ?? ""}`)
         .join("; ")
     : "";
+
+  const formatAddress = (entity) => {
+    if (!entity) return "";
+    if (entity.adres_volledig) return entity.adres_volledig;
+    const parts = [
+      entity.straat,
+      entity.huisnummer,
+      entity.postcode,
+      entity.plaats,
+      entity.provincie_of_staat || entity.regio,
+      entity.land,
+    ].filter(Boolean);
+    return parts.join(" ");
+  };
+
   return [
-    `Afzender: ${a.naam ?? ""} (KvK: ${a.kvk_nummer ?? ""}, BTW: ${a.btw_nummer ?? ""}, Email: ${
-      a.email ?? ""
-    }, Tel: ${a.telefoon ?? ""})`,
-    `Ontvanger: ${b.naam ?? ""} (KvK: ${b.kvk_nummer ?? ""}, BTW: ${b.btw_nummer ?? ""}, Email: ${
-      b.email ?? ""
-    }, Tel: ${b.telefoon ?? ""})`,
-    `Factuur: #${f.factuurnummer ?? ""} d.d. ${f.factuurdatum ?? ""} vervaldatum ${f.vervaldatum ?? ""}`,
+    `Afzender: ${a.naam ?? ""} ${formatAddress(a)} (KvK: ${a.kvk_nummer ?? ""}, BTW: ${a.btw_nummer ?? ""}, Email: ${a.email ?? ""}, Tel: ${a.telefoon ?? ""})`,
+    `Ontvanger: ${b.naam ?? ""} ${formatAddress(b)} (KvK: ${b.kvk_nummer ?? ""}, BTW: ${b.btw_nummer ?? ""}, Email: ${b.email ?? ""}, Tel: ${b.telefoon ?? ""})`,
+    `Factuur: #${f.factuurnummer ?? ""} d.d. ${f.factuurdatum ?? ""} vervaldatum ${f.vervaldatum ?? ""} aankoop_tijd ${f.aankoop_tijd ?? ""} betaal_tijd ${f.betaal_tijd ?? ""}`,
     `Totaal excl: ${t.totaal_excl_btw ?? ""}, BTW: ${t.btw ?? ""}, Totaal incl: ${t.totaal_incl_btw ?? ""}`,
     `Regels: ${regels}`,
   ].join("\n");
