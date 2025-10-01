@@ -218,18 +218,45 @@ function summarizeForAI(structured) {
 }
 
 function pickKeywordsFromAI(structured) {
-  const list = [];
+  const set = new Set();
+  const push = (value) => {
+    if (!value) return;
+    const normalized = String(value).trim().toLowerCase();
+    if (normalized) set.add(normalized);
+  };
+
   if (structured?.boekhoudcategorie_suggesties?.length) {
     for (const s of structured.boekhoudcategorie_suggesties) {
-      if (s?.naam) list.push(s.naam);
+      if (s?.naam) push(s.naam);
     }
   }
-  if (list.length === 0 && structured?.alternatieve_zoekwoorden?.length) {
+
+  if (structured?.alternatieve_zoekwoorden?.length) {
     for (const k of structured.alternatieve_zoekwoorden) {
-      if (k) list.push(k);
+      push(k);
     }
   }
-  return [...new Set(list.map((x) => String(x).toLowerCase()))].slice(0, 8);
+
+  const vendor = structured?.factuurdetails?.afzender?.naam;
+  push(vendor);
+
+  const regels = structured?.factuurdetails?.regels;
+  if (Array.isArray(regels)) {
+    for (const r of regels) {
+      push(r?.categorie);
+      push(r?.subcategorie ?? r?.subtype);
+      // keep short descriptions to guide fuzzy search when categories are missing
+      if (r?.omschrijving && String(r.omschrijving).length <= 40) {
+        push(r.omschrijving);
+      }
+    }
+  }
+
+  const arr = [...set].slice(0, 12);
+  if (arr.length) return arr;
+
+  const fallbackKw = ["boodschappen", "supermarkt", "levensmiddelen", "eten", "drinken"];
+  return fallbackKw;
 }
 
 async function convertHeicViaCloudinary(sourceUrl) {
@@ -327,8 +354,9 @@ async function rankDbCandidatesWithAI(structured, candidates) {
   const invoiceSummary = summarizeForAI(structured);
 
   const instructions = `
-Je krijgt een factuursamenvatting en een lijst met COA (RGS 3.7) grootboekrekeningen (nummer + omschrijving).
+Je krijgt een factuursamenvatting (incl. productcategorieën, bedragen, betaalwijze en loyalty-info) en een lijst met COA (RGS 3.7) grootboekrekeningen (nummer + omschrijving).
 Kies de beste rekening voor het boeken van deze factuur, en geef ook kansen voor de overige opties.
+Let extra op de genoemde productcategorieën en de aard van de uitgaven.
 Antwoord ALLEEN met JSON in dit formaat (geen markdown):
 
 {
