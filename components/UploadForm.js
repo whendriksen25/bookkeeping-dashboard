@@ -6,6 +6,7 @@ export default function UploadForm({ onAnalyze }) {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
   const [selectedNumber, setSelectedNumber] = useState("");
+  const [extraInfo, setExtraInfo] = useState("");
 
   const topChoice = useMemo(() => {
     if (!data?.ai_ranking?.scores) return null;
@@ -39,7 +40,10 @@ export default function UploadForm({ onAnalyze }) {
     const az = await fetch("/api/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ file: upData }),
+      body: JSON.stringify({
+        file: upData,
+        extraText: extraInfo.trim() || undefined,
+      }),
     });
     if (!az.ok) {
       setLoading(false);
@@ -97,6 +101,13 @@ export default function UploadForm({ onAnalyze }) {
           accept=".pdf,.png,.jpg,.jpeg,.heic,.heif,.heics,image/*"
           onChange={(e) => setFile(e.target.files[0] || null)}
           className="block w-full border rounded p-2"
+        />
+        <textarea
+          value={extraInfo}
+          onChange={(e) => setExtraInfo(e.target.value)}
+          placeholder="Optioneel: plak hier extra metadata of notities (bijv. handmatig overgenomen kassabon-details)."
+          className="block w-full border rounded p-2 text-sm"
+          rows={4}
         />
         <button
           type="submit"

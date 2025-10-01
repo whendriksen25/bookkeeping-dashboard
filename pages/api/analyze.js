@@ -344,11 +344,20 @@ function isPdf(filename) {
   return /.pdf$/i.test(filename || "");
 }
 
-async function extractWithFile(localPath) {
+async function extractWithFile(localPath, extraText = "") {
   const upload = await client.files.create({
     file: fs.createReadStream(localPath),
     purpose: "assistants",
   });
+
+  const extraBlocks = extraText
+    ? [
+        {
+          type: "input_text",
+          text: `Extra context van gebruiker:\n${extraText}`,
+        },
+      ]
+    : [];
 
   const resp = await client.responses.create({
     model: "gpt-4o-mini",
@@ -357,6 +366,7 @@ async function extractWithFile(localPath) {
         role: "user",
         content: [
           { type: "input_text", text: INVOICE_PROMPT },
+          ...extraBlocks,
           { type: "input_file", file_id: upload.id },
         ],
       },
@@ -373,7 +383,16 @@ async function extractWithFile(localPath) {
   return { rawText: text, structured: safeParseJSON(text) };
 }
 
-async function extractWithImageUrl(imageUrl) {
+async function extractWithImageUrl(imageUrl, extraText = "") {
+  const extraBlocks = extraText
+    ? [
+        {
+          type: "input_text",
+          text: `Extra context van gebruiker:\n${extraText}`,
+        },
+      ]
+    : [];
+
   const resp = await client.responses.create({
     model: "gpt-4o",
     input: [
@@ -381,6 +400,7 @@ async function extractWithImageUrl(imageUrl) {
         role: "user",
         content: [
           { type: "input_text", text: INVOICE_PROMPT },
+          ...extraBlocks,
           { type: "input_image", image_url: imageUrl },
         ],
       },
@@ -404,10 +424,11 @@ export default async function handler(req, res) {
   try {
     if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-    const { file } = req.body || {};
+    const { file, extraText } = req.body || {};
     const storage = file?.storage || "local";
     const filename = file?.filename;
     const fileUrl = file?.url;
+    const userHints = typeof extraText === "string" ? extraText.trim() : "";
 
     if (!filename) return res.status(400).json({ error: "filename missing" });
 
@@ -448,9 +469,9 @@ export default async function handler(req, res) {
 
     let extraction;
     if (useFileUpload) {
-      extraction = await extractWithFile(localPath);
+      extraction = await extractWithFile(localPath, userHints);
     } else if (imageUrlForAI) {
-      extraction = await extractWithImageUrl(imageUrlForAI);
+      extraction = await extractWithImageUrl(imageUrlForAI, userHints);
     } else {
       throw new Error("No accessible URL for image analysis");
     }
