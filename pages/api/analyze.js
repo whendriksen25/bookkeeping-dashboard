@@ -138,39 +138,6 @@ Belangrijk:
 `;
 
 // ---------- Helpers ----------
-const CATEGORY_KEYWORD_OVERRIDES = {
-  "groente en fruit": [
-    "inkoop voedingsmiddelen",
-    "inkoop handelsgoederen",
-    "kostprijs verkopen",
-    "inkoop kruidenierswaren",
-  ],
-  zuivel: [
-    "inkoop voedingsmiddelen",
-    "inkoop zuivel",
-    "inkoop handelsgoederen",
-  ],
-  vlees: [
-    "inkoop vlees",
-    "inkoop voedingsmiddelen",
-    "kostprijs verkopen",
-  ],
-  snacks: [
-    "inkoop levensmiddelen",
-    "representatiekosten",
-    "inkoop catering",
-  ],
-  ontbijt: [
-    "inkoop levensmiddelen",
-    "kantinekosten",
-    "kostprijs verkopen",
-  ],
-  supermarkt: [
-    "inkoop handelsgoederen",
-    "inkoop levensmiddelen",
-  ],
-};
-
 function stripCodeFence(s) {
   if (!s || typeof s !== "string") return s;
   const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -281,10 +248,6 @@ function pickKeywordsFromAI(structured) {
       const subcat = r?.subcategorie ?? r?.subtype;
       push(cat);
       push(subcat);
-      const normalizedCat = cat ? String(cat).trim().toLowerCase() : "";
-      if (normalizedCat && CATEGORY_KEYWORD_OVERRIDES[normalizedCat]) {
-        for (const extra of CATEGORY_KEYWORD_OVERRIDES[normalizedCat]) push(extra);
-      }
       // keep short descriptions to guide fuzzy search when categories are missing
       if (r?.omschrijving && String(r.omschrijving).length <= 40) {
         push(r.omschrijving);
