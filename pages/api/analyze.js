@@ -133,10 +133,44 @@ Belangrijk:
 - Leg vast wanneer mogelijk: "aankoop_tijd" (bon tijdstip) en "betaal_tijd" (indien afzonderlijk vermeld). Laat leeg als onbekend.
 - "herberekende_totalen" moeten worden afgeleid uit de regels. Zet "komt_overeen_met_ticket" op false en vul "verschil" in wanneer de herberekende totalen afwijken of de ticket-bedragen niet leesbaar zijn.
 - "btw_bedrag" per regel is de totale btw voor die regel.
+- Gebruik in "boekhoudcategorie_suggesties" bij voorkeur officiële RGS-/grootboekbenamingen (bijv. "Kosten inkoop handelsgoederen").
 - Retourneer alleen JSON, geen extra tekst of markdown.
 `;
 
 // ---------- Helpers ----------
+const CATEGORY_KEYWORD_OVERRIDES = {
+  "groente en fruit": [
+    "inkoop voedingsmiddelen",
+    "inkoop handelsgoederen",
+    "kostprijs verkopen",
+    "inkoop kruidenierswaren",
+  ],
+  zuivel: [
+    "inkoop voedingsmiddelen",
+    "inkoop zuivel",
+    "inkoop handelsgoederen",
+  ],
+  vlees: [
+    "inkoop vlees",
+    "inkoop voedingsmiddelen",
+    "kostprijs verkopen",
+  ],
+  snacks: [
+    "inkoop levensmiddelen",
+    "representatiekosten",
+    "inkoop catering",
+  ],
+  ontbijt: [
+    "inkoop levensmiddelen",
+    "kantinekosten",
+    "kostprijs verkopen",
+  ],
+  supermarkt: [
+    "inkoop handelsgoederen",
+    "inkoop levensmiddelen",
+  ],
+};
+
 function stripCodeFence(s) {
   if (!s || typeof s !== "string") return s;
   const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -243,8 +277,14 @@ function pickKeywordsFromAI(structured) {
   const regels = structured?.factuurdetails?.regels;
   if (Array.isArray(regels)) {
     for (const r of regels) {
-      push(r?.categorie);
-      push(r?.subcategorie ?? r?.subtype);
+      const cat = r?.categorie;
+      const subcat = r?.subcategorie ?? r?.subtype;
+      push(cat);
+      push(subcat);
+      const normalizedCat = cat ? String(cat).trim().toLowerCase() : "";
+      if (normalizedCat && CATEGORY_KEYWORD_OVERRIDES[normalizedCat]) {
+        for (const extra of CATEGORY_KEYWORD_OVERRIDES[normalizedCat]) push(extra);
+      }
       // keep short descriptions to guide fuzzy search when categories are missing
       if (r?.omschrijving && String(r.omschrijving).length <= 40) {
         push(r.omschrijving);
@@ -252,7 +292,7 @@ function pickKeywordsFromAI(structured) {
     }
   }
 
-  const arr = [...set].slice(0, 12);
+  const arr = [...set].slice(0, 16);
   if (arr.length) return arr;
 
   const fallbackKw = ["boodschappen", "supermarkt", "levensmiddelen", "eten", "drinken"];
