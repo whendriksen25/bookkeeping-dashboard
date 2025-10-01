@@ -155,7 +155,7 @@ export default function UploadForm({ onAnalyze }) {
                 <div>Kassier: {data.factuurdetails?.kassier || "-"}</div>
                 <div>POS/Kassa: {data.factuurdetails?.kassa_terminal || "-"}</div>
                 <div>Aankoop tijd: {data.factuurdetails?.aankoop_tijd || "-"}</div>
-                <div>Betaal tijd: {data.factuurdetails?.betaal_tijd || "-"}</div>
+                <div>Betaal tijd: {data.factuurdetails?.betaal_tijd || data.factuurdetails?.aankoop_tijd || "-"}</div>
               </div>
               <div className="border rounded p-3">
                 <div>Totaal excl. BTW: {data.factuurdetails?.totaal?.totaal_excl_btw ?? "-"}</div>

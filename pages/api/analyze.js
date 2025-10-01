@@ -166,7 +166,7 @@ function summarizeForAI(structured) {
   return [
     `Afzender: ${a.naam ?? ""} ${formatAddress(a)} (KvK: ${a.kvk_nummer ?? ""}, BTW: ${a.btw_nummer ?? ""}, Email: ${a.email ?? ""}, Tel: ${a.telefoon ?? ""})`,
     `Ontvanger: ${b.naam ?? ""} ${formatAddress(b)} (KvK: ${b.kvk_nummer ?? ""}, BTW: ${b.btw_nummer ?? ""}, Email: ${b.email ?? ""}, Tel: ${b.telefoon ?? ""})`,
-    `Factuur: #${f.factuurnummer ?? ""} d.d. ${f.factuurdatum ?? ""} vervaldatum ${f.vervaldatum ?? ""} aankoop_tijd ${f.aankoop_tijd ?? ""} betaal_tijd ${f.betaal_tijd ?? ""}`,
+    `Factuur: #${f.factuurnummer ?? ""} d.d. ${f.factuurdatum ?? ""} vervaldatum ${f.vervaldatum ?? ""} aankoop_tijd ${f.aankoop_tijd ?? ``} betaal_tijd ${f.betaal_tijd ?? f.aankoop_tijd ?? ``}`,
     `Totaal excl: ${t.totaal_excl_btw ?? ""}, BTW: ${t.btw ?? ""}, Totaal incl: ${t.totaal_incl_btw ?? ""}`,
     `Regels: ${regels}`,
   ].join("\n");
