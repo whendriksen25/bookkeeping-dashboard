@@ -60,6 +60,8 @@ export default function Home() {
     (userData) => {
       setUser(userData || null);
       setAnalysis(null);
+      setProfiles([]);
+      setProfilesLoaded(false);
       setSelectedAccount("");
       setProfileError("");
     },
