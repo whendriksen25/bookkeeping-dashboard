@@ -6,6 +6,7 @@ import OpenAI from "openai";
 import { Pool } from "pg";
 import crypto from "crypto";
 import { listProfiles } from "../../lib/profiles.js";
+import { requireAuth } from "../../lib/auth.js";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -636,6 +637,9 @@ export default async function handler(req, res) {
   let cleanupTmpDir = null;
 
   try {
+    const session = await requireAuth(req, res);
+    if (!session) return;
+
     if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
     const { file, extraText } = req.body || {};
@@ -693,7 +697,7 @@ export default async function handler(req, res) {
     const { rawText, structured } = extraction;
     const normalizedStructured = normalizeStructuredOutput(structured);
 
-    const availableProfiles = await listProfiles();
+    const availableProfiles = await listProfiles(session.userId);
     const profileSuggestion = await suggestProfileForInvoice(normalizedStructured, availableProfiles);
 
     const aiKeywords = pickKeywordsFromAI(normalizedStructured);

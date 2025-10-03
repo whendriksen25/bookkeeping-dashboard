@@ -4,6 +4,7 @@ import {
   updateProfile,
   deleteProfile,
 } from "../../../lib/profiles.js";
+import { requireAuth } from "../../../lib/auth.js";
 
 export default async function handler(req, res) {
   const {
@@ -17,20 +18,23 @@ export default async function handler(req, res) {
   }
 
   try {
+    const session = await requireAuth(req, res);
+    if (!session) return;
+
     if (method === "GET") {
-      const profile = await getProfileById(numericId);
+      const profile = await getProfileById(numericId, session.userId);
       if (!profile) return res.status(404).json({ error: "Profile not found" });
       return res.status(200).json({ profile });
     }
 
     if (method === "PUT") {
-      const profile = await updateProfile(numericId, req.body || {});
+      const profile = await updateProfile(numericId, session.userId, req.body || {});
       if (!profile) return res.status(404).json({ error: "Profile not found" });
       return res.status(200).json({ profile });
     }
 
     if (method === "DELETE") {
-      await deleteProfile(numericId);
+      await deleteProfile(numericId, session.userId);
       return res.status(204).end();
     }
 

@@ -1,6 +1,7 @@
 // pages/api/book.js
 import pool from "../../lib/db.js";
 import { saveInvoiceWithItems } from "../../lib/invoices.js";
+import { requireAuth } from "../../lib/auth.js";
 
 async function ensureBookingTableShape() {
   await pool.query(
@@ -89,6 +90,9 @@ export default async function handler(req, res) {
   }
 
   try {
+    const session = await requireAuth(req, res);
+    if (!session) return;
+
     const {
       factuurdetails,
       structured,
@@ -122,6 +126,7 @@ export default async function handler(req, res) {
       splitMode,
       selectedProfileId,
       lineItems,
+      userId: session.userId,
     });
 
     await ensureBookingTableShape();
@@ -161,6 +166,7 @@ export default async function handler(req, res) {
           `INSERT INTO bookings (
              invoice_number,
              invoice_id,
+             user_id,
              account_code,
              counter_account_code,
              debit_account,
@@ -180,6 +186,7 @@ export default async function handler(req, res) {
           [
             factuurdetails.factuurnummer,
             invoiceId,
+            session.userId,
             expenseAccount,
             creditorsAccount,
             expenseAccount,
@@ -200,6 +207,7 @@ export default async function handler(req, res) {
           `INSERT INTO bookings (
              invoice_number,
              invoice_id,
+             user_id,
              account_code,
              counter_account_code,
              debit_account,
@@ -219,6 +227,7 @@ export default async function handler(req, res) {
           [
             factuurdetails.factuurnummer,
             invoiceId,
+            session.userId,
             creditorsAccount,
             bankAccount,
             creditorsAccount,

@@ -1,5 +1,6 @@
 // pages/api/profiles/suggest.js
 import OpenAI from "openai";
+import { requireAuth } from "../../../lib/auth.js";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -10,6 +11,9 @@ export default async function handler(req, res) {
   }
 
   try {
+    const session = await requireAuth(req, res);
+    if (!session) return;
+
     const { name, description, website, type = "company" } = req.body || {};
     if (!name) return res.status(400).json({ error: "name is required" });
 

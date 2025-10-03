@@ -1,10 +1,14 @@
 // pages/api/profiles/index.js
 import { createProfile, listProfiles } from "../../../lib/profiles.js";
+import { requireAuth } from "../../../lib/auth.js";
 
 export default async function handler(req, res) {
   try {
+    const session = await requireAuth(req, res);
+    if (!session) return;
+
     if (req.method === "GET") {
-      const profiles = await listProfiles();
+      const profiles = await listProfiles(session.userId);
       return res.status(200).json({ profiles });
     }
 
@@ -16,7 +20,14 @@ export default async function handler(req, res) {
       if (!["company", "personal"].includes(type)) {
         return res.status(400).json({ error: "type must be 'company' or 'personal'" });
       }
-      const profile = await createProfile({ name, type, website, description, aiSummary, notes });
+      const profile = await createProfile(session.userId, {
+        name,
+        type,
+        website,
+        description,
+        aiSummary,
+        notes,
+      });
       return res.status(201).json({ profile });
     }
 
