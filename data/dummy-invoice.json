@@ -1,0 +1,159 @@
+{
+  "invoice_text": "Dummy bon Albert Heijn 1572 Geldermalsen\nAH Spinazie 1 x 1.69\nAH Bio Yoghurt 2 x 1.99\nBio Kipfilet 0.272kg 28.09/kg\nTotaal 76.00 EUR",
+  "factuurdetails": {
+    "afzender": {
+      "naam": "Albert Heijn 1572 Geldermalsen",
+      "adres_volledig": "Achter 't Veer 6, 4191 Geldermalsen, Nederland",
+      "straat": "Achter 't Veer",
+      "huisnummer": "6",
+      "postcode": "4191",
+      "plaats": "Geldermalsen",
+      "land": "Nederland"
+    },
+    "ontvanger": {
+      "naam": "Demo BV"
+    },
+    "factuurnummer": "DUMMY-2025-0001",
+    "factuurdatum": "2025-08-27",
+    "betaalstatus": "betaald",
+    "betaling_methode": "PIN",
+    "kassa_terminal": "5007897",
+    "totaal": {
+      "valuta": "EUR",
+      "totaal_excl_btw": "69.72",
+      "btw": "6.28",
+      "totaal_incl_btw": "76.00"
+    },
+    "regels": [
+      {
+        "omschrijving": "AH Spinazie",
+        "productcode": "SPINAZIE",
+        "aantal": "1",
+        "eenheid": "st",
+        "prijs_per_eenheid_excl": "1.69",
+        "totaal_excl": "1.69",
+        "btw_percentage": "9",
+        "btw_bedrag": "0.15",
+        "totaal_incl": "1.84",
+        "categorie": "Groente en fruit",
+        "subcategorie": "Spinazie"
+      },
+      {
+        "omschrijving": "AH Bio Yoghurt",
+        "productcode": "YOGHURT",
+        "aantal": "2",
+        "eenheid": "st",
+        "prijs_per_eenheid_excl": "1.99",
+        "totaal_excl": "3.98",
+        "btw_percentage": "9",
+        "btw_bedrag": "0.36",
+        "totaal_incl": "4.34",
+        "categorie": "Zuivel",
+        "subcategorie": "Yoghurt"
+      },
+      {
+        "omschrijving": "Bio Kipfilet",
+        "productcode": "KIPFILET",
+        "aantal": "0.272",
+        "eenheid": "kg",
+        "prijs_per_eenheid_excl": "28.09",
+        "totaal_excl": "7.65",
+        "btw_percentage": "9",
+        "btw_bedrag": "0.69",
+        "totaal_incl": "8.34",
+        "categorie": "Vlees",
+        "subcategorie": "Kip"
+      }
+    ]
+  },
+  "ai_first_suggestions": [
+    {
+      "naam": "Inkoop levensmiddelen",
+      "uitleg": "Dagelijkse boodschappen voor personeel of kantoor.",
+      "kans": 0.8
+    },
+    {
+      "naam": "Representatiekosten",
+      "uitleg": "Indien gebruikt voor relatiegeschenken of klantenlunch.",
+      "kans": 0.2
+    }
+  ],
+  "ai_keywords_used": ["supermarkt", "groente", "zuivel"],
+  "db_candidates": [
+    {
+      "number": "4000",
+      "description": "Inkoop handelsgoederen",
+      "level": 3,
+      "score": 0.92
+    },
+    {
+      "number": "4420",
+      "description": "Kantinekosten",
+      "level": 3,
+      "score": 0.76
+    }
+  ],
+  "ai_ranking": {
+    "keuze_nummer": "4000",
+    "toelichting": "Dummy data: supermarktboodschappen passen het beste op inkoop handelsgoederen.",
+    "scores": {
+      "4000": { "account_name": "Inkoop handelsgoederen", "probability": 0.7 },
+      "4420": { "account_name": "Kantinekosten", "probability": 0.3 }
+    }
+  },
+  "profile_suggestion": null,
+  "profiles": [],
+  "structured": {
+    "factuurdetails": {
+      "afzender": {
+        "naam": "Albert Heijn 1572 Geldermalsen",
+        "adres_volledig": "Achter 't Veer 6, 4191 Geldermalsen, Nederland"
+      },
+      "factuurnummer": "DUMMY-2025-0001",
+      "factuurdatum": "2025-08-27",
+      "betaalstatus": "betaald",
+      "betaling_methode": "PIN",
+      "totaal": {
+        "valuta": "EUR",
+        "totaal_excl_btw": "69.72",
+        "btw": "6.28",
+        "totaal_incl_btw": "76.00"
+      },
+      "regels": [
+        {
+          "omschrijving": "AH Spinazie",
+          "aantal": "1",
+          "prijs_per_eenheid_excl": "1.69",
+          "totaal_excl": "1.69",
+          "btw_percentage": "9",
+          "btw_bedrag": "0.15",
+          "totaal_incl": "1.84",
+          "categorie": "Groente en fruit",
+          "subcategorie": "Spinazie"
+        },
+        {
+          "omschrijving": "AH Bio Yoghurt",
+          "aantal": "2",
+          "prijs_per_eenheid_excl": "1.99",
+          "totaal_excl": "3.98",
+          "btw_percentage": "9",
+          "btw_bedrag": "0.36",
+          "totaal_incl": "4.34",
+          "categorie": "Zuivel",
+          "subcategorie": "Yoghurt"
+        },
+        {
+          "omschrijving": "Bio Kipfilet",
+          "aantal": "0.272",
+          "prijs_per_eenheid_excl": "28.09",
+          "totaal_excl": "7.65",
+          "btw_percentage": "9",
+          "btw_bedrag": "0.69",
+          "totaal_incl": "8.34",
+          "categorie": "Vlees",
+          "subcategorie": "Kip"
+        }
+      ]
+    }
+  }
+}

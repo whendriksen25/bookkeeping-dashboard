@@ -6,15 +6,19 @@ export default function UploadForm({
   profiles = [],
   profilesLoaded = false,
   onProfilesChange,
+  selectedAccount,
+  onSelectAccount,
 }) {
   const [file, setFile] = useState(null);
+  const [uploadedFileMeta, setUploadedFileMeta] = useState(null);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
-  const [selectedNumber, setSelectedNumber] = useState("");
   const [extraInfo, setExtraInfo] = useState("");
   const [selectedProfileId, setSelectedProfileId] = useState("");
   const [splitMode, setSplitMode] = useState(false);
   const [lineAssignments, setLineAssignments] = useState([]);
+  const [bookingState, setBookingState] = useState("idle");
+  const [bookingMessage, setBookingMessage] = useState("");
 
   const topChoice = useMemo(() => {
     if (!data?.ai_ranking?.scores) return null;
@@ -27,40 +31,17 @@ export default function UploadForm({
     return best;
   }, [data]);
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    if (!file) return;
-    setLoading(true);
+  const applyAnalysisResult = (azData, fileMeta = null) => {
+    if (!azData) return;
 
-    // 1) upload
-    const formData = new FormData();
-    formData.append("file", file);
-    const up = await fetch("/api/upload", { method: "POST", body: formData });
-    if (!up.ok) {
-      setLoading(false);
-      const errorText = await up.text();
-      console.error("Upload failed", errorText);
-      return;
-    }
-    const upData = await up.json();
-
-    // 2) analyze
-    const az = await fetch("/api/analyze", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        file: upData,
-        extraText: extraInfo.trim() || undefined,
-      }),
-    });
-    if (!az.ok) {
-      setLoading(false);
-      const errorText = await az.text();
-      console.error("Analyze failed", errorText);
-      return;
-    }
-    const azData = await az.json();
     setData(azData);
+    setBookingState("idle");
+    setBookingMessage("");
+
+    if (fileMeta) {
+      setUploadedFileMeta(fileMeta);
+    }
+
     if (Array.isArray(azData.profiles) && typeof onProfilesChange === "function") {
       onProfilesChange(azData.profiles);
     }
@@ -69,11 +50,19 @@ export default function UploadForm({
       ? String(azData.profile_suggestion.profileId)
       : "";
     setSelectedProfileId(suggestedProfile);
+
     const defaultAssignments = Array.isArray(azData?.factuurdetails?.regels)
       ? azData.factuurdetails.regels.map(() => suggestedProfile)
       : [];
     setLineAssignments(defaultAssignments);
     setSplitMode(false);
+
+    if (typeof onSelectAccount === "function") {
+      const suggestedAccount =
+        azData?.ai_ranking?.keuze_nummer || azData?.db_candidates?.[0]?.number || "";
+      onSelectAccount(suggestedAccount || "");
+    }
+
     if (typeof onAnalyze === "function") {
       try {
         onAnalyze(azData);
@@ -81,15 +70,65 @@ export default function UploadForm({
         console.warn("onAnalyze callback threw", callbackErr);
       }
     }
+  };
 
-    // preselect best choice
-    if (azData?.ai_ranking?.keuze_nummer) {
-      setSelectedNumber(azData.ai_ranking.keuze_nummer);
-    } else if (azData?.db_candidates?.[0]?.number) {
-      setSelectedNumber(azData.db_candidates[0].number);
+  async function handleLoadDummy() {
+    try {
+      setLoading(true);
+      const resp = await fetch("/api/analyze-dummy");
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(text || "Dummy analyse mislukt");
+      }
+      const dummyData = await resp.json();
+      const dummyFileMeta = {
+        storage: "dummy",
+        filename: "dummy-invoice.pdf",
+        url: null,
+      };
+      setFile(null);
+      applyAnalysisResult(dummyData, dummyFileMeta);
+    } catch (err) {
+      console.error("[dummy] failed", err);
+    } finally {
+      setLoading(false);
     }
+  }
 
-    setLoading(false);
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!file) return;
+    setLoading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const up = await fetch("/api/upload", { method: "POST", body: formData });
+      if (!up.ok) {
+        const errorText = await up.text();
+        console.error("Upload failed", errorText);
+        return;
+      }
+      const upData = await up.json();
+
+      const az = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          file: upData,
+          extraText: extraInfo.trim() || undefined,
+        }),
+      });
+      if (!az.ok) {
+        const errorText = await az.text();
+        console.error("Analyze failed", errorText);
+        return;
+      }
+      const azData = await az.json();
+      applyAnalysisResult(azData, upData);
+    } finally {
+      setLoading(false);
+    }
   }
 
   const lineItems = Array.isArray(data?.factuurdetails?.regels)
@@ -156,13 +195,13 @@ export default function UploadForm({
 
   const splitSummaryEntries = splitMode
     ? Object.values(
-        lineAssignments.reduce((acc, profileId, idx) => {
-          const key = profileId || "__none";
+        lineAssignments.reduce((acc, rawProfileId, idx) => {
+          const key = rawProfileId ? String(rawProfileId) : "default";
           if (!acc[key]) {
-            const profileInfo = profiles.find((p) => String(p.id) === profileId);
+            const profileInfo = profiles.find((p) => String(p.id) === key);
             acc[key] = {
-              profileId,
-              name: profileInfo?.name || (profileId ? `Profiel ${profileId}` : "Geen profiel"),
+              profileId: key,
+              name: profileInfo?.name || (key === "default" ? "Geen profiel" : `Profiel ${key}`),
               total: 0,
               lines: 0,
             };
@@ -173,6 +212,99 @@ export default function UploadForm({
         }, {})
       )
     : [];
+
+  const toNumeric = (value) => {
+    if (value === null || value === undefined || value === "") return null;
+    const normalized = String(value).replace(/[^0-9,.-]/g, "").replace(",", ".");
+    const num = Number(normalized);
+    return Number.isFinite(num) ? num : null;
+  };
+
+  const buildLineItemsPayload = () => {
+    return lineItems.map((item, idx) => {
+      const assignedProfileRaw = lineAssignments[idx] || (splitMode ? "" : selectedProfileId || "");
+      const resolvedProfile = assignedProfileRaw ? String(assignedProfileRaw) : "default";
+      return {
+        lineIndex: idx,
+        profileId: resolvedProfile,
+        description: item.omschrijving ?? item.description ?? "",
+        raw: item,
+        quantity: toNumeric(item.aantal ?? item.quantity),
+        unit: item.eenheid ?? item.unit ?? "",
+        unitPrice: toNumeric(
+          item.prijs_per_eenheid_excl ?? item.prijs ?? item.unit_price_excl ?? item.prijs_excl
+        ),
+        totalExcl: toNumeric(item.totaal_excl ?? item.bedrag_excl),
+        totalIncl: toNumeric(item.totaal_incl ?? item.bedrag_incl),
+        vatRate: toNumeric(item.btw_percentage ?? item.btw_perc),
+        vatAmount: toNumeric(item.btw_bedrag ?? item.vat_amount),
+        category: item.categorie ?? item.category ?? "",
+        subcategory: item.subcategorie ?? item.subcategory ?? "",
+        normalizedName: item.genormaliseerd_naam ?? item.normalized_name ?? item.omschrijving ?? item.description ?? "",
+        coaAccountNumber: item.coa_account_number || selectedAccount || null,
+      };
+    });
+  };
+
+  const handleBookInvoice = async () => {
+    if (!data) return;
+    if (!selectedAccount) {
+      setBookingState("error");
+      setBookingMessage("Kies eerst een grootboekrekening.");
+      return;
+    }
+
+    if (profiles.length > 0 && !splitMode && !selectedProfileId) {
+      setBookingState("error");
+      setBookingMessage("Selecteer een profiel voor deze bon of schakel splisten in.");
+      return;
+    }
+
+    if (splitMode) {
+      const missing = lineAssignments.some((value) => !value);
+      if (missing) {
+        setBookingState("error");
+        setBookingMessage("Niet alle regels zijn gekoppeld aan een profiel.");
+        return;
+      }
+    }
+
+    setBookingState("processing");
+    setBookingMessage("");
+
+    try {
+    const payload = {
+      factuurdetails: data.factuurdetails,
+      structured: data.structured,
+      invoiceText: data.invoice_text,
+      selectedAccount,
+      splitMode,
+      selectedProfileId: selectedProfileId ? String(selectedProfileId) : "default",
+      lineItems: buildLineItemsPayload(),
+        profiles,
+        file: uploadedFileMeta,
+      };
+
+      const resp = await fetch("/api/book", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(text || "Boeking mislukt");
+      }
+
+      const result = await resp.json();
+      setBookingState("success");
+      setBookingMessage(result.message || "Boeking opgeslagen.");
+    } catch (err) {
+      console.error("[book] failed", err);
+      setBookingState("error");
+      setBookingMessage(err.message || "Kon de boeking niet opslaan.");
+    }
+  };
 
   const formatAddress = (entity) => {
     if (!entity) return "";
@@ -210,6 +342,14 @@ export default function UploadForm({
           className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50"
         >
           {loading ? "Analyzing…" : "Upload & Analyze"}
+        </button>
+        <button
+          type="button"
+          onClick={handleLoadDummy}
+          disabled={loading}
+          className="px-4 py-2 bg-gray-200 text-gray-800 rounded disabled:opacity-50"
+        >
+          Gebruik dummy-invoice
         </button>
       </form>
 
@@ -543,8 +683,8 @@ export default function UploadForm({
             <label className="block text-sm font-medium mb-1">Te boeken op:</label>
             <select
               className="border rounded px-3 py-2 w-full md:w-auto"
-              value={selectedNumber}
-              onChange={(e) => setSelectedNumber(e.target.value)}
+              value={selectedAccount || ""}
+              onChange={(e) => onSelectAccount?.(e.target.value)}
             >
               {(data.db_candidates || []).map((c) => (
                 <option key={c.number} value={c.number}>
@@ -557,6 +697,40 @@ export default function UploadForm({
               <p className="text-xs text-gray-500 mt-2">
                 Toelichting AI: {data.ai_ranking.toelichting}
               </p>
+            )}
+          </section>
+
+          {/* BOOKING ACTION */}
+          <section className="border rounded p-4 bg-white space-y-3">
+            <h2 className="text-lg font-semibold">📘 Boeking</h2>
+            <p className="text-sm text-gray-600">
+              Controleer het grootboeknummer en de profielverdeling voordat je de bon in de database boekt.
+            </p>
+            <div className="flex flex-wrap gap-3 items-center">
+              <button
+                type="button"
+                onClick={handleBookInvoice}
+                disabled={bookingState === "processing" || !selectedAccount || !data}
+                className="px-4 py-2 bg-green-600 text-white rounded disabled:opacity-50"
+              >
+                {bookingState === "processing" ? "Bezig met boeken..." : "Boek naar database"}
+              </button>
+              {!selectedAccount && (
+                <span className="text-sm text-red-600">
+                  Kies eerst een grootboekrekening.
+                </span>
+              )}
+              {splitMode && splitSummaryEntries.some((entry) => !entry.profileId) && (
+                <span className="text-sm text-red-600">
+                  Wijs alle regels aan een profiel toe.
+                </span>
+              )}
+            </div>
+            {bookingState === "success" && (
+              <div className="text-sm text-green-700">{bookingMessage || "Boeking opgeslagen."}</div>
+            )}
+            {bookingState === "error" && (
+              <div className="text-sm text-red-600">{bookingMessage}</div>
             )}
           </section>
         </div>

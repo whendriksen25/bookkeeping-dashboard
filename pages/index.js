@@ -8,6 +8,7 @@ export default function Home() {
   const [analysis, setAnalysis] = useState(null);
   const [profiles, setProfiles] = useState([]);
   const [profilesLoaded, setProfilesLoaded] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState("");
 
   useEffect(() => {
     async function loadProfiles() {
@@ -26,6 +27,16 @@ export default function Home() {
     loadProfiles();
   }, []);
 
+  useEffect(() => {
+    if (!analysis) {
+      setSelectedAccount("");
+      return;
+    }
+    const suggested =
+      analysis?.ai_ranking?.keuze_nummer || analysis?.db_candidates?.[0]?.number || "";
+    setSelectedAccount(suggested || "");
+  }, [analysis]);
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <h1 className="text-2xl font-bold mb-6">🚀 Bookkeeping Dashboard</h1>
@@ -40,6 +51,8 @@ export default function Home() {
         profiles={profiles}
         profilesLoaded={profilesLoaded}
         onProfilesChange={setProfiles}
+        selectedAccount={selectedAccount}
+        onSelectAccount={setSelectedAccount}
       />
 
       {analysis && (
@@ -53,7 +66,11 @@ export default function Home() {
           </div>
 
           {/* 2. Show booking dropdown */}
-          <BookingDropdown analysis={analysis} />
+          <BookingDropdown
+            analysis={analysis}
+            selectedAccount={selectedAccount}
+            onAccountChange={setSelectedAccount}
+          />
         </div>
       )}
     </div>

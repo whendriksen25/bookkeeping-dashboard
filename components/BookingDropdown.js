@@ -1,9 +1,8 @@
-import { useState, useMemo } from "react";
+import { useMemo, useEffect } from "react";
 
-export default function BookingDropdown({ analysis }) {
+export default function BookingDropdown({ analysis, selectedAccount, onAccountChange }) {
   const candidates = analysis?.db_candidates ?? [];
   const scores = analysis?.ai_ranking?.scores ?? {};
-  const [selected, setSelected] = useState(() => analysis?.ai_ranking?.keuze_nummer || "");
 
   const options = useMemo(() => {
     return candidates.map((c) => {
@@ -16,6 +15,15 @@ export default function BookingDropdown({ analysis }) {
     });
   }, [candidates, scores]);
 
+  useEffect(() => {
+    if (!analysis) return;
+    if (selectedAccount) return;
+    const suggested = analysis?.ai_ranking?.keuze_nummer || options[0]?.value || "";
+    if (suggested && typeof onAccountChange === "function") {
+      onAccountChange(suggested);
+    }
+  }, [analysis, selectedAccount, options, onAccountChange]);
+
   if (options.length === 0) {
     return <p className="text-sm text-gray-600">Geen kandidaten gevonden.</p>;
   }
@@ -24,8 +32,8 @@ export default function BookingDropdown({ analysis }) {
     <div>
       <label className="block font-medium mb-1">Kies grootboekrekening:</label>
       <select
-        value={selected}
-        onChange={(e) => setSelected(e.target.value)}
+        value={selectedAccount || ""}
+        onChange={(e) => onAccountChange?.(e.target.value)}
         className="border rounded p-2 w-full"
       >
         {options
