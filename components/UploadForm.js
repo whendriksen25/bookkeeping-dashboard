@@ -131,9 +131,9 @@ export default function UploadForm({
     }
   }
 
-  const lineItems = Array.isArray(data?.factuurdetails?.regels)
-    ? data.factuurdetails.regels
-    : [];
+  const lineItems = useMemo(() => {
+    return Array.isArray(data?.factuurdetails?.regels) ? data.factuurdetails.regels : [];
+  }, [data]);
 
   const recalculated = data?.herberekende_totalen || {};
   const sender = data?.factuurdetails?.afzender || {};
@@ -148,23 +148,19 @@ export default function UploadForm({
     : [];
   const selectedProfile = profiles.find((p) => String(p.id) === selectedProfileId);
   useEffect(() => {
-    if (!splitMode) {
-      setLineAssignments((prev) => {
-        if (!lineItems.length) return [];
-        const fallback = selectedProfileId || "";
-        if (prev.length === lineItems.length) {
-          return prev.map(() => fallback);
-        }
-        return lineItems.map(() => fallback);
-      });
+    if (splitMode) return;
+    if (!lineItems.length) {
+      setLineAssignments((prev) => (prev.length ? [] : prev));
+      return;
     }
-  }, [selectedProfileId, splitMode, lineItems.length]);
-
-  useEffect(() => {
-    if (!splitMode && lineItems.length && lineAssignments.length !== lineItems.length) {
-      setLineAssignments(lineItems.map(() => selectedProfileId || ""));
-    }
-  }, [lineItems.length, splitMode, lineAssignments.length, selectedProfileId]);
+    const fallback = selectedProfileId || "";
+    setLineAssignments((prev) => {
+      if (prev.length === lineItems.length && prev.every((value) => value === fallback)) {
+        return prev;
+      }
+      return Array.from({ length: lineItems.length }, () => fallback);
+    });
+  }, [selectedProfileId, splitMode, lineItems]);
 
   const handleToggleSplit = () => {
     if (!profiles.length) return;
@@ -378,8 +374,11 @@ export default function UploadForm({
                 )}
 
                 <div>
-                  <label className="block text-sm font-medium mb-1">Koppel aan profiel</label>
+                  <label className="block text-sm font-medium mb-1" htmlFor="upload-profile-select">
+                    Koppel aan profiel
+                  </label>
                   <select
+                    id="upload-profile-select"
                     className="border rounded p-2 w-full"
                     value={selectedProfileId}
                     onChange={(e) => setSelectedProfileId(e.target.value)}
@@ -680,8 +679,11 @@ export default function UploadForm({
               </div>
             )}
 
-            <label className="block text-sm font-medium mb-1">Te boeken op:</label>
+            <label className="block text-sm font-medium mb-1" htmlFor="upload-booking-select">
+              Te boeken op:
+            </label>
             <select
+              id="upload-booking-select"
               className="border rounded px-3 py-2 w-full md:w-auto"
               value={selectedAccount || ""}
               onChange={(e) => onSelectAccount?.(e.target.value)}

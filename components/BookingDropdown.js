@@ -1,10 +1,9 @@
 import { useMemo, useEffect } from "react";
 
 export default function BookingDropdown({ analysis, selectedAccount, onAccountChange }) {
-  const candidates = analysis?.db_candidates ?? [];
-  const scores = analysis?.ai_ranking?.scores ?? {};
-
   const options = useMemo(() => {
+    const candidates = analysis?.db_candidates ?? [];
+    const scores = analysis?.ai_ranking?.scores ?? {};
     return candidates.map((c) => {
       const prob = scores[c.number]?.probability ?? 0;
       return {
@@ -13,7 +12,7 @@ export default function BookingDropdown({ analysis, selectedAccount, onAccountCh
         probability: prob,
       };
     });
-  }, [candidates, scores]);
+  }, [analysis]);
 
   useEffect(() => {
     if (!analysis) return;
@@ -30,8 +29,11 @@ export default function BookingDropdown({ analysis, selectedAccount, onAccountCh
 
   return (
     <div>
-      <label className="block font-medium mb-1">Kies grootboekrekening:</label>
+      <label className="block font-medium mb-1" htmlFor="booking-account">
+        Kies grootboekrekening:
+      </label>
       <select
+        id="booking-account"
         value={selectedAccount || ""}
         onChange={(e) => onAccountChange?.(e.target.value)}
         className="border rounded p-2 w-full"

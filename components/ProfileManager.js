@@ -134,8 +134,11 @@ export default function ProfileManager({ profiles, onProfilesChange }) {
 
       <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <label className="block text-sm font-medium">Naam</label>
+          <label className="block text-sm font-medium" htmlFor="profile-name">
+            Naam
+          </label>
           <input
+            id="profile-name"
             type="text"
             value={form.name}
             onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
@@ -146,8 +149,11 @@ export default function ProfileManager({ profiles, onProfilesChange }) {
         </div>
 
         <div className="space-y-2">
-          <label className="block text-sm font-medium">Type</label>
+          <label className="block text-sm font-medium" htmlFor="profile-type">
+            Type
+          </label>
           <select
+            id="profile-type"
             value={form.type}
             onChange={(e) => setForm((prev) => ({ ...prev, type: e.target.value }))}
             className="border rounded p-2 w-full"
@@ -158,8 +164,11 @@ export default function ProfileManager({ profiles, onProfilesChange }) {
         </div>
 
         <div className="space-y-2">
-          <label className="block text-sm font-medium">Website</label>
+          <label className="block text-sm font-medium" htmlFor="profile-website">
+            Website
+          </label>
           <input
+            id="profile-website"
             type="url"
             value={form.website}
             onChange={(e) => setForm((prev) => ({ ...prev, website: e.target.value }))}
@@ -169,8 +178,11 @@ export default function ProfileManager({ profiles, onProfilesChange }) {
         </div>
 
         <div className="space-y-2">
-          <label className="block text-sm font-medium">Beschrijving</label>
+          <label className="block text-sm font-medium" htmlFor="profile-description">
+            Beschrijving
+          </label>
           <textarea
+            id="profile-description"
             value={form.description}
             onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
             className="border rounded p-2 w-full"
@@ -180,8 +192,11 @@ export default function ProfileManager({ profiles, onProfilesChange }) {
         </div>
 
         <div className="md:col-span-2 space-y-2">
-          <label className="block text-sm font-medium">AI-samenvatting</label>
+          <label className="block text-sm font-medium" htmlFor="profile-ai-summary">
+            AI-samenvatting
+          </label>
           <textarea
+            id="profile-ai-summary"
             value={form.aiSummary}
             onChange={(e) => setForm((prev) => ({ ...prev, aiSummary: e.target.value }))}
             className="border rounded p-2 w-full"

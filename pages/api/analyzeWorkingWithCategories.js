@@ -56,7 +56,7 @@ Lees de factuur zorgvuldig en geef een JSON terug met:
     try {
       analysis = JSON.parse(response.output[0].content[0].text);
     } catch (err) {
-      console.warn("⚠️ Could not parse JSON, returning raw text");
+      console.warn("⚠️ Could not parse JSON, returning raw text", err);
       analysis = { raw: response.output_text };
     }
 

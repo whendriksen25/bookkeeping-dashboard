@@ -69,11 +69,14 @@ export default function UploadForm() {
 
       {analysis && (
         <div style={{ marginTop: "20px" }}>
-          <h3
-            style={{ cursor: "pointer", color: "blue" }}
-            onClick={() => setExpanded(!expanded)}
-          >
-            📊 Analysis Result {expanded ? "▼" : "▶"}
+          <h3>
+            <button
+              type="button"
+              onClick={() => setExpanded((prev) => !prev)}
+              style={{ cursor: "pointer", color: "blue", background: "none", border: "none", padding: 0 }}
+            >
+              📊 Analysis Result {expanded ? "▼" : "▶"}
+            </button>
           </h3>
           {expanded && (
             <div style={{ padding: "10px", border: "1px solid #ddd", borderRadius: "5px" }}>
