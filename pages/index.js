@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import AuthForm from "../components/AuthForm";
 import UploadForm from "../components/UploadForm";
 import BookingDropdown from "../components/BookingDropdown";
 import ProfileManager from "../components/ProfileManager";
+import OnboardingLanding from "../components/OnboardingLanding";
 
 export default function Home() {
   const [user, setUser] = useState(null);
@@ -118,9 +118,10 @@ export default function Home() {
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
-        <AuthForm onSuccess={handleAuthSuccess} />
-      </div>
+      <OnboardingLanding
+        onAuthSuccess={handleAuthSuccess}
+        onSwitchToLogin={() => setSelectedAccount("")}
+      />
     );
   }
 
