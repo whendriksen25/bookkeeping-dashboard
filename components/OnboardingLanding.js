@@ -1,34 +1,65 @@
 import { useState } from "react";
+import {
+  ScanBooksIcon,
+  UserPlusIcon,
+  LoginIcon,
+  HelpIcon,
+  CaptureIcon,
+  AIIcon,
+  ListIcon,
+  ShieldCheckIcon,
+  GoogleIcon,
+  GitHubIcon,
+} from "./OnboardingIcons";
+import styles from "./OnboardingLanding.module.css";
 
-const tabs = [
-  { id: "register", label: "Create account" },
-  { id: "login", label: "Log in" },
+const featureCards = [
+  {
+    icon: CaptureIcon,
+    text: "Smart capture from email, mobile, and desktop",
+  },
+  {
+    icon: AIIcon,
+    text: "AI suggestions for vendors and accounts",
+  },
+  {
+    icon: ListIcon,
+    text: "Line item splits with classes and departments",
+  },
+  {
+    icon: ShieldCheckIcon,
+    text: "Approvals before booking to QuickBooks, Xero",
+  },
 ];
 
-const teamSizeOptions = ["1-10", "11-50", "51-200", "201-500", "500+"];
+const teamSizes = ["1-10", "11-50", "51-200", "201-500", "500+"];
 
-export default function OnboardingLanding({ onAuthSuccess, onSwitchToLogin }) {
-  const [activeTab, setActiveTab] = useState("register");
-  const [registerForm, setRegisterForm] = useState({
-    fullName: "Jane Doe",
-    workEmail: "name@company.com",
-    password: "password123",
-    company: "Northshore LLC",
-    teamSize: teamSizeOptions[0],
-    useCase: "AP automation & booking",
-  });
-  const [loginForm, setLoginForm] = useState({
-    email: "you@company.com",
-    password: "password123",
-  });
+const defaultRegister = {
+  fullName: "Jane Doe",
+  workEmail: "name@company.com",
+  password: "Password123!",
+  company: "Northshore LLC",
+  teamSize: "1-10",
+  useCase: "AP automation & booking",
+};
+
+const defaultLogin = {
+  email: "you@company.com",
+  password: "Password123!",
+};
+
+export default function OnboardingLanding({ onAuthSuccess }) {
+  const [view, setView] = useState("signup");
+  const [registerForm, setRegisterForm] = useState(defaultRegister);
+  const [loginForm, setLoginForm] = useState(defaultLogin);
+  const [message, setMessage] = useState({ type: "", text: "" });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
 
-  const handleTabChange = (id) => {
-    setActiveTab(id);
-    setError("");
-    setSuccess("");
+  const isSignup = view === "signup";
+
+  const handleSwitch = (next) => {
+    setView(next);
+    setMessage({ type: "", text: "" });
   };
 
   const handleRegisterChange = (field, value) => {
@@ -42,8 +73,7 @@ export default function OnboardingLanding({ onAuthSuccess, onSwitchToLogin }) {
   const submitRegister = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setError("");
-    setSuccess("");
+    setMessage({ type: "", text: "" });
     try {
       const resp = await fetch("/api/auth/register", {
         method: "POST",
@@ -55,14 +85,12 @@ export default function OnboardingLanding({ onAuthSuccess, onSwitchToLogin }) {
       });
       const data = await resp.json();
       if (!resp.ok) {
-        throw new Error(data?.error || "Registratie mislukt");
+        throw new Error(data?.error || "Registration failed");
       }
-      setSuccess("Account aangemaakt! Bezig met inloggen...");
-      if (typeof onAuthSuccess === "function") {
-        onAuthSuccess(data.user);
-      }
+      setMessage({ type: "success", text: "Account created. Redirecting..." });
+      onAuthSuccess?.(data.user);
     } catch (err) {
-      setError(err.message || "Registratie mislukt");
+      setMessage({ type: "error", text: err.message || "Registration failed" });
     } finally {
       setLoading(false);
     }
@@ -71,359 +99,249 @@ export default function OnboardingLanding({ onAuthSuccess, onSwitchToLogin }) {
   const submitLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setError("");
-    setSuccess("");
+    setMessage({ type: "", text: "" });
     try {
       const resp = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: loginForm.email,
-          password: loginForm.password,
-        }),
+        body: JSON.stringify(loginForm),
       });
       const data = await resp.json();
       if (!resp.ok) {
-        throw new Error(data?.error || "Inloggen mislukt");
+        throw new Error(data?.error || "Login failed");
       }
-      setSuccess("Welkom terug! Bezig met inloggen...");
-      if (typeof onAuthSuccess === "function") {
-        onAuthSuccess(data.user);
-      }
+      setMessage({ type: "success", text: "Welcome back!" });
+      onAuthSuccess?.(data.user);
     } catch (err) {
-      setError(err.message || "Inloggen mislukt");
+      setMessage({ type: "error", text: err.message || "Login failed" });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col md:flex-row">
-      {/* Sidebar */}
-      <aside className="w-full md:w-64 bg-slate-950 flex flex-col border-b md:border-b-0 md:border-r border-slate-800">
-        <div className="px-6 py-6 flex items-center gap-3 border-b border-slate-800">
-          <div className="h-10 w-10 rounded bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-xl font-semibold">
-            SB
-          </div>
+    <div className={styles.root}>
+      <aside className={styles.sidebar}>
+        <div className={styles.sidebarBrand}>
+          <span className={styles.sidebarIcon}>
+            <ScanBooksIcon />
+          </span>
           <div>
-            <p className="text-sm uppercase tracking-wide text-slate-400">ScanBooks</p>
-            <p className="font-semibold text-lg text-white">Control Center</p>
+            <p className={styles.sidebarLabel}>ScanBooks</p>
+            <p className={styles.sidebarTitle}>AI Invoicing</p>
           </div>
         </div>
-        <nav className="flex-1 py-6">
-          <ul className="space-y-1 px-4">
-            <li>
-              <button
-                type="button"
-                className="w-full flex items-center gap-3 px-3 py-3 rounded-lg bg-emerald-500/20 text-emerald-200 font-medium"
-              >
-                <span className="text-xl">👋</span>
-                Get Started
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab("login");
-                  if (typeof onSwitchToLogin === "function") {
-                    onSwitchToLogin();
-                  }
-                }}
-                className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
-              >
-                <span className="text-xl">🔐</span>
-                Login
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
-              >
-                <span className="text-xl">❓</span>
-                Help
-              </button>
-            </li>
-          </ul>
+        <nav className={styles.navList}>
+          <button type="button" className={`${styles.navButton} ${styles.navPrimary}`}>
+            <UserPlusIcon />
+            Get Started
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSwitch("login")}
+            className={styles.navButton}
+          >
+            <LoginIcon />
+            Login
+          </button>
+          <button type="button" className={styles.navButton}>
+            <HelpIcon />
+            Help
+          </button>
         </nav>
-        <div className="px-6 py-6 text-xs text-slate-500">
-          © {new Date().getFullYear()} ScanBooks
-        </div>
+        <div className={styles.sidebarFooter}>© {new Date().getFullYear()} ScanBooks</div>
       </aside>
 
-      {/* Main content */}
-      <main className="flex-1 bg-slate-100 text-slate-900">
-        <header className="h-16 border-b border-slate-200 bg-white flex items-center justify-between px-4 md:px-10">
-          <div className="flex items-center gap-3 text-base md:text-lg font-semibold">
-            <span className="text-slate-500 text-2xl">⌘</span>
+      <main className={styles.main}>
+        <header className={styles.header}>
+          <div className={styles.headerBrand}>
+            <ScanBooksIcon />
             <span>AI Invoicing</span>
           </div>
-          <div className="flex items-center gap-3 md:gap-4 text-xs md:text-sm">
-            <button type="button" className="text-slate-600 hover:text-slate-900">
-              Contact Sales
-            </button>
-            <button type="button" className="text-slate-600 hover:text-slate-900">
-              Docs
-            </button>
+          <div className={styles.headerActions}>
+            <button type="button">Contact Sales</button>
+            <button type="button">Docs</button>
           </div>
         </header>
 
-        <div className="px-4 md:px-10 py-8 grid grid-cols-1 xl:grid-cols-[1.1fr,0.9fr] gap-6 xl:gap-8">
-          {/* Left content */}
-          <section className="bg-white rounded-3xl border border-slate-200 px-6 md:px-10 py-8 md:py-12 shadow-sm order-2 xl:order-1">
-            <div className="max-w-lg space-y-6">
-              <div className="space-y-4">
-                <p className="text-emerald-500 uppercase tracking-widest text-[10px] md:text-xs font-semibold">
-                  Automate your invoice workflow
-                </p>
-                <h1 className="text-2xl md:text-3xl xl:text-4xl font-semibold text-slate-900">
-                  Automate your invoice and receipt workflow
-                </h1>
-                <p className="text-slate-600 leading-relaxed text-sm md:text-base">
-                  Capture, extract, and book invoices to your accounting system with AI-assisted data entry,
-                  account recommendations, and approvals.
-                </p>
-              </div>
-              <div className="grid sm:grid-cols-2 gap-3 md:gap-4">
-                {[
-                  {
-                    title: "Smart capture",
-                    desc: "From email, mobile, and desktop",
-                    icon: "📸",
-                  },
-                  {
-                    title: "AI suggestions",
-                    desc: "For vendors and accounts",
-                    icon: "🤖",
-                  },
-                  {
-                    title: "Line item splits",
-                    desc: "With classes and departments",
-                    icon: "🧾",
-                  },
-                  {
-                    title: "Approvals",
-                    desc: "Before booking to QuickBooks, Xero",
-                    icon: "✅",
-                  },
-                ].map((feature) => (
-                  <div key={feature.title} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:p-5 shadow-inner">
-                    <div className="text-lg md:text-xl">{feature.icon}</div>
-                    <p className="mt-3 text-sm font-semibold text-slate-900">{feature.title}</p>
-                    <p className="text-xs text-slate-500 leading-relaxed">{feature.desc}</p>
+        <div className={styles.content}>
+          <section className={styles.promo}>
+            <div className={styles.promoContent}>
+              <h1>Automate your invoice and receipt workflow</h1>
+              <p>
+                Capture, extract, and book invoices to your accounting system with AI-assisted data entry, account
+                recommendations, and approvals.
+              </p>
+              <div className={styles.featureGrid}>
+                {featureCards.map(({ icon: Icon, text }) => (
+                  <div key={text} className={styles.featureCard}>
+                    <Icon />
+                    <p>{text}</p>
                   </div>
                 ))}
               </div>
-              <div className="h-40 md:h-48 border border-dashed border-slate-300 rounded-2xl flex items-center justify-center text-slate-400 text-xs md:text-sm">
-                Product preview
-              </div>
             </div>
+            <div className={styles.previewBox}>Product preview</div>
           </section>
 
-          {/* Right content: forms */}
-          <section className="bg-white rounded-3xl border border-slate-200 p-6 md:p-8 space-y-6 shadow-sm order-1 xl:order-2">
-            <div className="flex items-center gap-2">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => handleTabChange(tab.id)}
-                  className={`px-4 py-2 rounded-full text-sm font-medium border transition-colors ${
-                    activeTab === tab.id
-                      ? "bg-emerald-500 text-white border-emerald-500"
-                      : "border-slate-200 text-slate-500 hover:text-slate-800"
-                  }`}
-                >
-                  {tab.label}
+          <section className={styles.panel}>
+            {isSignup ? (
+            <form className={styles.form} onSubmit={submitRegister}>
+              <div className={styles.tabRow}>
+                <button type="button" className={`${styles.tabButton} ${styles.tabActive}`}>
+                  Create account
                 </button>
-              ))}
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
-              <button
-                type="button"
-                className="flex-1 inline-flex items-center justify-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
-              >
-                <span>🔒</span>
-                Continue with Google
-              </button>
-              <button
-                type="button"
-                className="flex-1 inline-flex items-center justify-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
-              >
-                <span>🐙</span>
-                Continue with GitHub
-              </button>
-            </div>
-
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center" aria-hidden="true">
-                <div className="w-full border-t border-slate-200" />
+                <button type="button" onClick={() => handleSwitch("login")} className={styles.tabButton}>
+                  Log in
+                </button>
               </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-white px-3 text-slate-400">or</span>
+
+              <div className={styles.socialRow}>
+                <button type="button" className={styles.socialButton}>
+                  <GoogleIcon />
+                  Continue with Google
+                </button>
+                <button type="button" className={styles.socialButton}>
+                  <GitHubIcon />
+                  Continue with GitHub
+                </button>
               </div>
-            </div>
 
-            {error && <p className="text-sm text-red-500">{error}</p>}
-            {success && <p className="text-sm text-emerald-600">{success}</p>}
+              <div className={styles.divider}>
+                <span>or</span>
+              </div>
 
-            {activeTab === "register" ? (
-              <form onSubmit={submitRegister} className="space-y-4">
-                <div className="grid grid-cols-1 gap-4">
-                  <label className="text-xs font-medium text-slate-500">
-                    Full name
-                    <input
-                      type="text"
-                      value={registerForm.fullName}
-                      onChange={(e) => handleRegisterChange("fullName", e.target.value)}
-                      className="mt-1 w-full rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-                      placeholder="Jane Doe"
-                    />
-                  </label>
-                  <label className="text-xs font-medium text-slate-500">
-                    Work email
-                    <input
-                      type="email"
-                      value={registerForm.workEmail}
-                      onChange={(e) => handleRegisterChange("workEmail", e.target.value)}
-                      required
-                      className="mt-1 w-full rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-                      placeholder="name@company.com"
-                    />
-                  </label>
-                  <label className="text-xs font-medium text-slate-500">
-                    Password
-                    <input
-                      type="password"
-                      value={registerForm.password}
-                      onChange={(e) => handleRegisterChange("password", e.target.value)}
-                      required
-                      className="mt-1 w-full rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-                      placeholder="••••••••"
-                    />
-                  </label>
-                  <label className="text-xs font-medium text-slate-500">
-                    Company
-                    <input
-                      type="text"
-                      value={registerForm.company}
-                      onChange={(e) => handleRegisterChange("company", e.target.value)}
-                      className="mt-1 w-full rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-                      placeholder="Northshore LLC"
-                    />
-                  </label>
-                  <label className="text-xs font-medium text-slate-500">
-                    Team size
-                    <select
-                      value={registerForm.teamSize}
-                      onChange={(e) => handleRegisterChange("teamSize", e.target.value)}
-                      className="mt-1 w-full rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-                    >
-                      {teamSizeOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="text-xs font-medium text-slate-500">
-                    Use case
-                    <input
-                      type="text"
-                      value={registerForm.useCase}
-                      onChange={(e) => handleRegisterChange("useCase", e.target.value)}
-                      className="mt-1 w-full rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-                      placeholder="AP automation & booking"
-                    />
-                  </label>
-                </div>
-                <p className="text-xs text-slate-400">
-                  By creating an account, you agree to the Terms and Privacy Policy.
+              <label className={styles.field}>
+                <span>Full name</span>
+                <input
+                  type="text"
+                  value={registerForm.fullName}
+                  onChange={(e) => handleRegisterChange("fullName", e.target.value)}
+                  className={styles.input}
+                />
+              </label>
+              <label className={styles.field}>
+                <span>Work email</span>
+                <input
+                  type="email"
+                  value={registerForm.workEmail}
+                  onChange={(e) => handleRegisterChange("workEmail", e.target.value)}
+                  required
+                  className={styles.input}
+                />
+              </label>
+              <label className={styles.field}>
+                <span>Password</span>
+                <input
+                  type="password"
+                  value={registerForm.password}
+                  onChange={(e) => handleRegisterChange("password", e.target.value)}
+                  required
+                  className={styles.input}
+                />
+              </label>
+              <label className={styles.field}>
+                <span>Company</span>
+                <input
+                  type="text"
+                  value={registerForm.company}
+                  onChange={(e) => handleRegisterChange("company", e.target.value)}
+                  className={styles.input}
+                />
+              </label>
+              <label className={styles.field}>
+                <span>Team size</span>
+                <select
+                  value={registerForm.teamSize}
+                  onChange={(e) => handleRegisterChange("teamSize", e.target.value)}
+                  className={styles.input}
+                >
+                  {teamSizes.map((size) => (
+                    <option key={size} value={size}>
+                      {size}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={styles.field}>
+                <span>Use case</span>
+                <input
+                  type="text"
+                  value={registerForm.useCase}
+                  onChange={(e) => handleRegisterChange("useCase", e.target.value)}
+                  className={styles.input}
+                />
+              </label>
+
+              <p className={styles.smallPrint}>
+                By creating an account, you agree to the Terms and Privacy Policy.
+              </p>
+
+              {message.text && (
+                <p className={`${styles.message} ${message.type === "error" ? styles.error : styles.success}`}>
+                  {message.text}
                 </p>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <button
-                    type="button"
-                    onClick={() => handleTabChange("login")}
-                    className="flex-1 rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
-                  >
-                    Log in instead
-                  </button>
-                  <div className="flex-1">
-                    <button
-                      type="button"
-                      onClick={() => handleTabChange("login")}
-                      className="w-full rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
-                    >
-                      Back
-                    </button>
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="flex-1 rounded-full bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-emerald-600 disabled:opacity-50"
-                  >
-                    {loading ? "Bezig..." : "Create account"}
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <form onSubmit={submitLogin} className="space-y-4">
-                <div className="grid grid-cols-1 gap-4">
-                  <label className="text-xs font-medium text-slate-500">
-                    Email
-                    <input
-                      type="email"
-                      value={loginForm.email}
-                      onChange={(e) => handleLoginChange("email", e.target.value)}
-                      required
-                      className="mt-1 w-full rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-                      placeholder="you@company.com"
-                    />
-                  </label>
-                  <label className="text-xs font-medium text-slate-500">
-                    Password
-                    <input
-                      type="password"
-                      value={loginForm.password}
-                      onChange={(e) => handleLoginChange("password", e.target.value)}
-                      required
-                      className="mt-1 w-full rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-                      placeholder="••••••••"
-                    />
-                  </label>
-                </div>
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs text-slate-500">
-                  <span>Protect your account with SSO and 2FA in Settings after signup.</span>
-                  <div>
-                    <button
-                      type="button"
-                      onClick={() => handleTabChange("register")}
-                      className="text-emerald-600 hover:text-emerald-700 font-medium"
-                    >
-                      Forgot password
-                    </button>
-                  </div>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <button
-                    type="button"
-                    onClick={() => handleTabChange("register")}
-                    className="flex-1 rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
-                  >
-                    Back
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="flex-1 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-slate-800 disabled:opacity-50"
-                  >
-                    {loading ? "Bezig..." : "Log in"}
-                  </button>
-                </div>
-              </form>
-            )}
+              )}
+
+              <div className={styles.actionRow}>
+                <button type="button" onClick={() => handleSwitch("login")} className={styles.secondaryButton}>
+                  Log in instead
+                </button>
+                <button type="submit" disabled={loading} className={styles.primaryButton}>
+                  {loading ? "Processing..." : "Create account"}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form className={styles.form} onSubmit={submitLogin}>
+              <div className={styles.tabRow}>
+                <button type="button" onClick={() => handleSwitch("signup")} className={styles.tabButton}>
+                  Create account
+                </button>
+                <button type="button" className={`${styles.tabButton} ${styles.tabActive}`}>
+                  Log in
+                </button>
+              </div>
+
+              <label className={styles.field}>
+                <span>Email</span>
+                <input
+                  type="email"
+                  value={loginForm.email}
+                  onChange={(e) => handleLoginChange("email", e.target.value)}
+                  required
+                  className={styles.input}
+                />
+              </label>
+              <label className={styles.field}>
+                <span>Password</span>
+                <input
+                  type="password"
+                  value={loginForm.password}
+                  onChange={(e) => handleLoginChange("password", e.target.value)}
+                  required
+                  className={styles.input}
+                />
+              </label>
+
+              {message.text && (
+                <p className={`${styles.message} ${message.type === "error" ? styles.error : styles.success}`}>
+                  {message.text}
+                </p>
+              )}
+
+              <div className={styles.footerRow}>
+                <span>Protect your account with SSO and 2FA after signup.</span>
+                <button type="button" onClick={() => handleSwitch("signup")}>
+                  Forgot password?
+                </button>
+              </div>
+
+              <button type="submit" disabled={loading} className={styles.primaryButton}>
+                {loading ? "Processing..." : "Log in"}
+              </button>
+            </form>
+          )}
           </section>
         </div>
       </main>

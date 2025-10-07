@@ -21,6 +21,7 @@ export default [
       "out/**",
       "build/**",
       "next-env.d.ts",
+      "components/ui/**",
     ],
   },
   ...compat.extends(

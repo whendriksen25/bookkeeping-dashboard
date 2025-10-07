@@ -8,6 +8,7 @@ export default function UploadForm({
   onProfilesChange,
   selectedAccount,
   onSelectAccount,
+  onUploadComplete,
 }) {
   const [file, setFile] = useState(null);
   const [uploadedFileMeta, setUploadedFileMeta] = useState(null);
@@ -68,6 +69,14 @@ export default function UploadForm({
         onAnalyze(azData);
       } catch (callbackErr) {
         console.warn("onAnalyze callback threw", callbackErr);
+      }
+    }
+
+    if (typeof onUploadComplete === "function" && fileMeta) {
+      try {
+        onUploadComplete(fileMeta, azData);
+      } catch (callbackErr) {
+        console.warn("onUploadComplete callback threw", callbackErr);
       }
     }
   };

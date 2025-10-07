@@ -1,3 +1,36 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif;
+  }
+}
+
+@layer components {
+  .form-input {
+    @apply w-full border border-slate-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition;
+  }
+
+  .nav-button {
+    @apply flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-colors;
+  }
+
+  .feature-box {
+    @apply bg-slate-100 border border-slate-200 rounded-xl p-5 shadow-card;
+  }
+
+  .btn-primary {
+    @apply bg-teal-600 hover:bg-teal-700 text-white font-semibold px-6 py-3 rounded-lg transition-colors;
+  }
+
+  .btn-secondary {
+    @apply border border-slate-200 hover:bg-slate-100 text-slate-700 px-6 py-3 rounded-lg transition-colors;
+  }
+}

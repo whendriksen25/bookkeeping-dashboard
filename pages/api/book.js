@@ -8,6 +8,7 @@ async function ensureBookingTableShape() {
     `ALTER TABLE bookings
       ADD COLUMN IF NOT EXISTS invoice_id UUID,
       ADD COLUMN IF NOT EXISTS invoice_number TEXT,
+      ADD COLUMN IF NOT EXISTS user_id UUID,
       ADD COLUMN IF NOT EXISTS profile_reference TEXT,
       ADD COLUMN IF NOT EXISTS account_code TEXT,
       ADD COLUMN IF NOT EXISTS counter_account_code TEXT,
@@ -175,7 +176,7 @@ export default async function handler(req, res) {
              description,
              profile_reference
            )
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
            ON CONFLICT (invoice_id, account_code, counter_account_code, profile_reference)
            DO UPDATE SET
              amount = EXCLUDED.amount,
@@ -216,7 +217,7 @@ export default async function handler(req, res) {
              description,
              profile_reference
            )
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
            ON CONFLICT (invoice_id, account_code, counter_account_code, profile_reference)
            DO UPDATE SET
              amount = EXCLUDED.amount,

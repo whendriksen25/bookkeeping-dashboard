@@ -1,0 +1,124 @@
+.root {
+  display: grid;
+  gap: 24px;
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.summaryCard {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  padding: 20px;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.summaryCard h3 {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  color: #94a3b8;
+  letter-spacing: 0.08em;
+}
+
+.summaryValue {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.summaryDelta {
+  font-size: 0.85rem;
+  color: #10b981;
+}
+
+.gridTwo {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 24px;
+}
+
+.card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 24px;
+  padding: 24px;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.card h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.connectionList,
+.tasksList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.connectionItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #475569;
+}
+
+.badgeSuccess {
+  background: rgba(16, 185, 129, 0.16);
+  color: #047857;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+}
+
+.badgeWarn {
+  background: rgba(250, 204, 21, 0.2);
+  color: #92400e;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+}
+
+.generateCard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.fieldBox {
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  border-radius: 16px;
+  padding: 12px;
+  font-size: 0.85rem;
+  color: #475569;
+}
+
+.primaryButton {
+  border: none;
+  background: #0d9488;
+  color: #ffffff;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primaryButton:hover {
+  background: #0f766e;
+}
