@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="112" height="112" viewBox="0 0 112 112" role="img">
+  <defs>
+    <linearGradient id="aiutofin-mark-dark-arrow" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1A57FF" />
+      <stop offset="55%" stop-color="#21A4FF" />
+      <stop offset="100%" stop-color="#3AE4FF" />
+    </linearGradient>
+  </defs>
+  <g fill="none" fill-rule="evenodd">
+    <path d="M42.6 13.6c13.7-13 31-20.55 51.9-22.1l2.2-.16c7.83-.3 14.15 5.94 13.86 13.77-.14 3.56-1.63 6.95-4.02 9.54L84.84 36.7l18.6 3.6c6.28 1.21 10.98 6.64 11.1 13.02.2 7.83-5.87 14.29-13.7 14.29H42.13c-6.8 0-12.53-4.79-13.76-11.33-1.12-6 1.9-12.06 7.26-14.96l14.7-7.77-18.4-8.2c-11.53-5.17-13.71-20.37-4.22-28.6z" fill="url(#aiutofin-mark-dark-arrow)"/>
+    <path d="M54.5 10.22c19.56 0 35.43 15.86 35.43 35.42 0 6.22-1.62 11.9-4.34 16.66-4.68 8.3-13.93 12.8-23.54 12.8H33.4c-5.57 0-10.83 2.79-13.97 7.45-2.67 3.94-7.22 6.41-12 6.41-8.17 0-14.75-6.6-14.75-14.75 0-.77.06-1.53.16-2.28L-1.8 40.46C.35 27.35 10.4 17.23 23.6 17.23h7.76" fill="#FFFFFF"/>
+    <g transform="translate(77 20)" fill="#3AE4FF">
+      <rect width="9" height="9" rx="2"/>
+      <rect width="9" height="9" rx="2" x="17" y="11" opacity=".8"/>
+      <rect width="9" height="9" rx="2" x="-3" y="16" opacity=".6"/>
+    </g>
+  </g>
+</svg>

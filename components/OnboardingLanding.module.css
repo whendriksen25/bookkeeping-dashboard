@@ -18,24 +18,20 @@
 .sidebarBrand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   margin-bottom: 32px;
 }
 
-.sidebarIcon {
-  color: #14b8a6;
-  display: inline-flex;
+.sidebarLogoIcon {
+  width: 38px;
+  height: auto;
+  display: block;
 }
 
-.sidebarLabel {
-  font-size: 0.875rem;
-  color: #cbd5e1;
-}
-
-.sidebarTitle {
-  font-size: 1rem;
-  font-weight: 600;
-  color: #ffffff;
+.sidebarLogoText {
+  width: 132px;
+  height: auto;
+  display: block;
 }
 
 .navList {
@@ -97,7 +93,6 @@
 .headerBrand {
   display: flex;
   align-items: center;
-  gap: 12px;
   font-size: 1.125rem;
   font-weight: 600;
   color: #0f172a;
@@ -155,10 +150,24 @@
   color: #0f172a;
 }
 
-.promoContent p {
+.leadText {
   font-size: 1.125rem;
   color: #64748b;
   max-width: 560px;
+}
+
+.leadText strong {
+  color: #1d4ed8;
+}
+
+.brandStory {
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  border-radius: 20px;
+  padding: 18px 20px;
+  color: #3730a3;
+  font-size: 0.95rem;
+  line-height: 1.6;
 }
 
 .featureGrid {
@@ -203,8 +212,29 @@
   background: #ffffff;
   padding: 48px 64px;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
+}
+
+.panelStack {
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.panelSubtitle {
+  font-size: 0.95rem;
+  color: #475569;
+  margin: 0;
+}
+
+.panelSetup {
+  align-items: flex-start;
+  justify-content: flex-start;
+  overflow-y: auto;
 }
 
 .form {
@@ -375,6 +405,11 @@
   color: #0f172a;
 }
 
+.secondaryButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .footerRow span {
   font-size: 0.75rem;
   color: #94a3b8;
@@ -394,6 +429,118 @@
   color: #0f766e;
 }
 
+.userChip {
+  padding: 8px 14px;
+  border-radius: 9999px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  font-size: 0.85rem;
+  color: #475569;
+}
+
+.logoutLink {
+  border: none;
+  background: none;
+  color: #dc2626;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.logoutLink:hover {
+  color: #b91c1c;
+}
+
+.setupWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+}
+
+.setupHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+@media (min-width: 640px) {
+  .setupHeader {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+  }
+}
+
+.setupHeader h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.setupHeader p {
+  font-size: 0.95rem;
+  color: #475569;
+  max-width: 360px;
+}
+
+.setupError {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(220, 38, 38, 0.2);
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 0.85rem;
+}
+
+.setupError button {
+  border: none;
+  background: none;
+  color: #dc2626;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.setupError button:hover {
+  text-decoration: underline;
+}
+
+.setupLoading {
+  padding: 24px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 16px;
+  text-align: center;
+  color: #64748b;
+  font-size: 0.9rem;
+  background: #f8fafc;
+}
+
+.setupActions {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.setupHint {
+  font-size: 0.9rem;
+  color: #475569;
+}
+
+.setupButtons {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
 @media (max-width: 1024px) {
   .sidebar {
     display: none;
@@ -409,6 +556,10 @@
 
   .panel {
     padding: 32px 24px;
+  }
+
+  .panelStack {
+    max-width: 100%;
   }
 }
 

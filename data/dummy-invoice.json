@@ -68,17 +68,22 @@
   },
   "ai_first_suggestions": [
     {
-      "naam": "Inkoop levensmiddelen",
-      "uitleg": "Dagelijkse boodschappen voor personeel of kantoor.",
-      "kans": 0.8
+      "naam": "Inkoop handelsgoederen",
+      "uitleg": "Reguliere inkoop van supermarktartikelen voor verkoop of interne consumptie.",
+      "kans": 0.58
+    },
+    {
+      "naam": "Kantine- en personeelskosten",
+      "uitleg": "Dagelijkse boodschappen voor personeelsvoorzieningen vallen vaak onder kantinekosten.",
+      "kans": 0.29
     },
     {
       "naam": "Representatiekosten",
-      "uitleg": "Indien gebruikt voor relatiegeschenken of klantenlunch.",
-      "kans": 0.2
+      "uitleg": "Gebruik bij klantontvangsten of relatiegeschenken; controleer of bon hieraan voldoet.",
+      "kans": 0.13
     }
   ],
-  "ai_keywords_used": ["supermarkt", "groente", "zuivel"],
+  "ai_keywords_used": ["supermarkt", "boodschappen", "kantine", "levensmiddelen", "groente", "zuivel"],
   "db_candidates": [
     {
       "number": "4000",
@@ -90,19 +95,39 @@
       "number": "4420",
       "description": "Kantinekosten",
       "level": 3,
-      "score": 0.76
+      "score": 0.79
+    },
+    {
+      "number": "4470",
+      "description": "Representatiekosten",
+      "level": 3,
+      "score": 0.63
     }
   ],
   "ai_ranking": {
     "keuze_nummer": "4000",
-    "toelichting": "Dummy data: supermarktboodschappen passen het beste op inkoop handelsgoederen.",
+    "toelichting": "AI: boodschappen bestaan grotendeels uit voorraad en voedsel voor personeel. Kies 4000 tenzij bon bedoeld is voor klantlunch (dan 4470).",
     "scores": {
-      "4000": { "account_name": "Inkoop handelsgoederen", "probability": 0.7 },
-      "4420": { "account_name": "Kantinekosten", "probability": 0.3 }
+      "4000": { "account_name": "Inkoop handelsgoederen", "probability": 0.58 },
+      "4420": { "account_name": "Kantinekosten", "probability": 0.29 },
+      "4470": { "account_name": "Representatiekosten", "probability": 0.13 }
     }
   },
-  "profile_suggestion": null,
-  "profiles": [],
+  "profile_suggestion": {
+    "profileId": 102,
+    "confidence": 0.82,
+    "reason": "Bon is geadresseerd aan Demo BV en betreft EUR-uitgaven; profiel Demo BV heeft automatische boekingsregels voor boodschappen.",
+    "ranked": [
+      { "profileId": 102, "name": "Demo BV", "probability": 0.82, "reason": "Hoofdprofiel voor dagelijkse bedrijfsuitgaven." },
+      { "profileId": 101, "name": "Northshore Coffee LLC", "probability": 0.12, "reason": "Alternatief zakelijk profiel met EUR-locatie." },
+      { "profileId": 103, "name": "Directie privé", "probability": 0.06, "reason": "Alleen kiezen bij privé declaraties." }
+    ]
+  },
+  "profiles": [
+    { "id": 101, "name": "Northshore Coffee LLC", "type": "business", "currency": "EUR" },
+    { "id": 102, "name": "Demo BV", "type": "business", "currency": "EUR" },
+    { "id": 103, "name": "Directie privé", "type": "personal", "currency": "EUR" }
+  ],
   "structured": {
     "factuurdetails": {
       "afzender": {

@@ -20,6 +20,40 @@ async function ensureBookingTableShape() {
       ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`
   );
 
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'bookings'
+          AND column_name = 'invoice_id'
+          AND data_type <> 'uuid'
+      ) THEN
+        ALTER TABLE bookings
+          ALTER COLUMN invoice_id TYPE UUID USING NULLIF(invoice_id::text, '')::uuid;
+      END IF;
+    END
+    $$;
+  `);
+
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'bookings'
+          AND column_name = 'user_id'
+          AND data_type <> 'uuid'
+      ) THEN
+        ALTER TABLE bookings
+          ALTER COLUMN user_id TYPE UUID USING NULLIF(user_id::text, '')::uuid;
+      END IF;
+    END
+    $$;
+  `);
+
   await pool.query(`ALTER TABLE bookings ALTER COLUMN account_code DROP NOT NULL`);
   await pool.query(`ALTER TABLE bookings ALTER COLUMN counter_account_code DROP NOT NULL`);
   await pool.query(`UPDATE bookings SET account_code = COALESCE(account_code, debit_account)`);
@@ -158,6 +192,8 @@ export default async function handler(req, res) {
     try {
       await client.query("BEGIN");
 
+      const bookingSummaryEntries = [];
+
       for (const [profileKey, total] of totalsByProfile.entries()) {
         const amount = Number(total || 0);
         if (!Number.isFinite(amount) || amount === 0) continue;
@@ -199,6 +235,12 @@ export default async function handler(req, res) {
             profileRef,
           ]
         );
+
+        bookingSummaryEntries.push({
+          profile: profileRef,
+          account: expenseAccount,
+          amount,
+        });
       }
 
       console.log("💾 Booking inserted: Expense ↔ Creditors");
@@ -240,6 +282,22 @@ export default async function handler(req, res) {
         );
         console.log("💾 Payment booking inserted: Creditors ↔ Bank");
       }
+
+      const bookingStatus = bookingSummaryEntries.length > 0 ? "booked" : "pending_review";
+      await client.query(
+        `UPDATE invoices
+           SET booking_status = $3,
+               booked_at = CASE WHEN $3 = 'booked' THEN NOW() ELSE booked_at END,
+               booking_summary = $4,
+               updated_at = NOW()
+         WHERE id = $1 AND (user_id = $2 OR ($2 IS NULL AND user_id IS NULL))`,
+        [
+          invoiceId,
+          session.userId || null,
+          bookingStatus,
+          JSON.stringify(bookingSummaryEntries),
+        ]
+      );
 
       await client.query("COMMIT");
       res.status(200).json({ success: true, message: "Boeking opgeslagen", invoiceId });

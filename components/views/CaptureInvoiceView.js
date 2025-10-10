@@ -1,93 +1,164 @@
-/* eslint-disable @next/next/no-img-element */
-import BookingDropdown from "../BookingDropdown";
 import UploadForm from "../UploadForm";
 import styles from "./CaptureInvoiceView.module.css";
 
-const captureTips = [
-  "Good light, flat surface, include full document.",
-  "Avoid shadows and folds.",
-  "Take multiple pages if needed.",
-];
-
-const inboxRules = [
-  { rule: "Subject contains \"Invoice\"", folder: "Finance/Invoices", action: "Move" },
-  { rule: "From: vendors@acme.com", folder: "Vendors", action: "Flag" },
-];
-
-function formatCurrency(value, currency = "USD") {
-  if (value === null || value === undefined) return "—";
+function formatCurrency(value, currency = "EUR") {
+  if (value === null || value === undefined || value === "") return "—";
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return String(value);
   try {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency,
-    }).format(Number(value));
+    return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(numeric);
   } catch {
-    return `$${Number(value).toFixed(2)}`;
+    return `${numeric.toFixed(2)} ${currency}`;
   }
 }
 
-function extractFromAnalysis(analysis) {
-  if (!analysis) return null;
-  const factuur = analysis?.factuurdetails || {};
-  const lineItems = Array.isArray(factuur?.regels) ? factuur.regels : [];
-  const vendor = factuur?.afzender?.naam || "—";
-  const invoiceNumber = factuur?.factuurnummer || factuur?.referentie || "—";
-  const currency = factuur?.valuta || factuur?.valuta_code || "USD";
-  const total = factuur?.totaal_incl || analysis?.herberekende_totalen?.totaal || null;
-  const receivedDate = factuur?.factuurdatum || "—";
-  const addressFrom =
-    [factuur?.afzender?.naam, factuur?.afzender?.adres?.straat, factuur?.afzender?.adres?.stad]
-      .filter(Boolean)
-      .join(", ") || "—";
-  const addressTo =
-    [factuur?.ontvanger?.naam, factuur?.ontvanger?.adres?.straat, factuur?.ontvanger?.adres?.stad]
-      .filter(Boolean)
-      .join(", ") || "—";
-  const contactPhone = factuur?.afzender?.telefoon || factuur?.ontvanger?.telefoon || "—";
-  const contactEmail = factuur?.afzender?.email || factuur?.ontvanger?.email || "—";
+function buildPreviewData(analysis, fallbackInvoice) {
+  const sourceUrl = analysis?.file?.url || fallbackInvoice?.sourceUrl || null;
+  const sourceFilename = analysis?.file?.filename || fallbackInvoice?.sourceFilename || null;
+  const factuur = analysis?.factuurdetails || fallbackInvoice?.factuurdetails || fallbackInvoice || {};
+  const totals = factuur?.totaal || {};
+  const total = totals?.totaal_incl_btw ?? factuur?.totaal_incl ?? fallbackInvoice?.totalIncl ?? null;
+  const subtotal = totals?.totaal_excl_btw ?? fallbackInvoice?.totalExcl ?? null;
+  const tax = totals?.btw ?? fallbackInvoice?.totalVat ?? null;
+  const currency = totals?.valuta || factuur?.valuta || fallbackInvoice?.currency || "EUR";
+  const vendor = factuur?.afzender?.naam || fallbackInvoice?.vendor || "—";
+  const vendorAddress =
+    factuur?.afzender?.adres_volledig || fallbackInvoice?.senderAddress || "—";
+  const customer = factuur?.ontvanger?.naam || fallbackInvoice?.receiver || "—";
+  const invoiceNumber =
+    factuur?.factuurnummer || factuur?.referentie || fallbackInvoice?.invoiceNumber || "—";
+  const invoiceDate = factuur?.factuurdatum || fallbackInvoice?.invoiceDate || "—";
+  const status = factuur?.betaalstatus || fallbackInvoice?.status || "Pending";
+
+  const rawLineItems = Array.isArray(factuur?.regels)
+    ? factuur.regels
+    : Array.isArray(fallbackInvoice?.lineItems)
+    ? fallbackInvoice.lineItems
+    : [];
+
+  const lineItems = rawLineItems.slice(0, 5).map((item, index) => ({
+    description:
+      item.omschrijving || item.description || item.omschrijving_lang || `Line ${index + 1}`,
+    quantity: item.aantal ?? item.quantity ?? "—",
+    unitPrice: item.prijs_per_eenheid_excl ?? item.prijs ?? item.unit_price_excl ?? item.unitPrice,
+    total: item.totaal_incl ?? item.totaal ?? item.totalPrice ?? item.totalIncl ?? null,
+  }));
 
   return {
+    sourceUrl,
+    sourceFilename,
     vendor,
+    vendorAddress,
+    customer,
     invoiceNumber,
-    currency,
+    invoiceDate,
+    status,
     total,
-    receivedDate,
-    addressFrom,
-    addressTo,
-    contactPhone,
-    contactEmail,
-    lineItems: lineItems.map((item, index) => ({
-      description: item.omschrijving || item.omschrijving_lang || `Line ${index + 1}`,
-      quantity: item.aantal ?? null,
-      unitPrice: item.prijs_per_stuk || item.prijs || null,
-      totalPrice: item.totaal_incl || item.totaal || null,
-    })),
+    subtotal,
+    tax,
+    currency,
+    lineItems,
   };
 }
 
-function extractFromFallback(fallback) {
-  if (!fallback) return null;
-  return {
-    vendor: fallback.vendor || "—",
-    invoiceNumber: fallback.invoiceNumber || "—",
-    currency: fallback.currency || "USD",
-    total: fallback.totalIncl || null,
-    receivedDate: fallback.invoiceDate || "—",
-    addressFrom: fallback.senderAddress || "—",
-    addressTo: fallback.receiverAddress || "—",
-    contactPhone: fallback.contactPhone || "—",
-    contactEmail: fallback.contactEmail || "—",
-    lineItems: Array.isArray(fallback.lineItems)
-      ? fallback.lineItems.map((item, index) => ({
-          description: item.description || `Line ${index + 1}`,
-          quantity: item.quantity ?? null,
-          unitPrice: item.unitPrice ?? null,
-          totalPrice: item.totalPrice ?? null,
-        }))
-      : [],
-    sourceUrl: fallback.sourceUrl || null,
-    sourceFilename: fallback.sourceFilename || null,
-  };
+function getUploadStatusClass(status) {
+  switch (status) {
+    case "Processing":
+      return styles.statusProcessing;
+    case "Booked":
+      return styles.statusBooked;
+    case "Pending Review":
+      return styles.statusPending;
+    default:
+      return styles.statusReady;
+  }
+}
+
+function PreviewPanel({ analysis, fallbackInvoice, selectedAccount, onGoToBookings }) {
+  const preview = buildPreviewData(analysis, fallbackInvoice);
+  const suggestions = Array.isArray(analysis?.ai_first_suggestions)
+    ? analysis.ai_first_suggestions
+    : [];
+  const ranking = analysis?.ai_ranking || null;
+  const candidates = Array.isArray(analysis?.db_candidates) ? analysis.db_candidates : [];
+  const topCandidateNumber = ranking?.keuze_nummer || selectedAccount || candidates[0]?.number || null;
+
+  return (
+    <div className={styles.previewStack}>
+      <section className={styles.previewCard}>
+        <div className={styles.previewHeader}>
+          <h2>Preview</h2>
+          <div className={styles.previewActions}>
+            <button type="button">Rotate</button>
+            <button type="button">Enhance</button>
+            <button type="button">Download</button>
+          </div>
+        </div>
+        <div className={styles.previewBox}>
+          {preview.sourceUrl ? (
+            preview.sourceUrl.match(/\.(png|jpe?g|gif|webp)$/i) ? (
+              <img
+                src={preview.sourceUrl}
+                alt={preview.sourceFilename || "Invoice preview"}
+                className={styles.previewImage}
+              />
+            ) : (
+              <iframe
+                src={preview.sourceUrl}
+                title={preview.sourceFilename || "Invoice preview"}
+                className={styles.previewFrame}
+              />
+            )
+          ) : (
+            <span>Invoice image or PDF preview</span>
+          )}
+        </div>
+      </section>
+
+      <section className={styles.previewCard}>
+        <div className={styles.previewHeader}>
+          <h3>AI COA suggestions</h3>
+        </div>
+        {suggestions.length === 0 ? (
+          <p className={styles.emptyState}>Upload or load a demo to see AI suggestions.</p>
+        ) : (
+          <ul className={styles.suggestionList}>
+            {suggestions.map((s, idx) => (
+              <li key={`${s.naam || idx}-${idx}`}>
+                <div>
+                  <span className={styles.suggestionName}>{s.naam || "Unnamed"}</span>
+                  {typeof s.kans === "number" && (
+                    <span className={styles.suggestionScore}>{Math.round(s.kans * 100)}%</span>
+                  )}
+                </div>
+                {s.uitleg && <p>{s.uitleg}</p>}
+              </li>
+            ))}
+          </ul>
+        )}
+        {candidates.length > 0 && (
+          <div className={styles.candidateList}>
+            <span className={styles.metaLabel}>Database matches</span>
+            <ul>
+              {candidates.slice(0, 5).map((candidate) => (
+                <li key={candidate.number} className={candidate.number === topCandidateNumber ? styles.activeCandidate : undefined}>
+                  <span>{candidate.number}</span>
+                  <span>{candidate.description}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <button
+          type="button"
+          className={styles.bookButton}
+          onClick={() => onGoToBookings?.()}
+        >
+          Suggestion for your bookkeeping system?
+        </button>
+      </section>
+    </div>
+  );
 }
 
 export default function CaptureInvoiceView({
@@ -102,250 +173,95 @@ export default function CaptureInvoiceView({
   onUploadComplete,
   onAnalyze,
   fallbackInvoice,
+  onGoToBookings,
 }) {
-  const preview = extractFromAnalysis(analysis) || extractFromFallback(fallbackInvoice) || {
-    vendor: "—",
-    invoiceNumber: "—",
-    currency: "USD",
-    total: null,
-    receivedDate: "—",
-    addressFrom: "—",
-    addressTo: "—",
-    contactPhone: "—",
-    contactEmail: "—",
-    lineItems: [],
-    sourceUrl: null,
-    sourceFilename: null,
-  };
-
-  const previewSource = analysis?.file?.url || preview.sourceUrl;
-
   return (
-    <div className={styles.root}>
-      <section className={styles.card}>
-        <div className={styles.cardHeader}>
-          <h2>Upload or Capture</h2>
-          <button type="button" className={styles.helpButton}>
-            Help
-          </button>
+    <div className={styles.page}>
+      <header className={styles.header}>
+        <div>
+          <p className={styles.breadcrumb}>Add Invoice</p>
+          <h1>Upload or Capture</h1>
+          <p className={styles.subtitle}>
+            Drag in receipts, email them, or snap a quick photo. We will extract the details and
+            keep the raw data at the bottom for review.
+          </p>
         </div>
-        <UploadForm
-          onAnalyze={onAnalyze}
-          profiles={profiles}
-          profilesLoaded={profilesLoaded}
-          onProfilesChange={onProfilesChange}
-          selectedAccount={selectedAccount}
-          onSelectAccount={onSelectAccount}
-          onUploadComplete={onUploadComplete}
-        />
-        {profileError && <p className="text-sm text-red-500 mt-4">{profileError}</p>}
-      </section>
-
-      <aside className={styles.previewStack}>
-        <div className={styles.card}>
-          <div className={styles.cardHeader}>
-            <h3>Preview</h3>
-            <div className={styles.previewActions}>
-              <button type="button">Rotate</button>
-              <button type="button">Enhance</button>
-              <button type="button">Download</button>
-            </div>
-          </div>
-          <div className={styles.previewBox}>
-            {previewSource ? (
-              previewSource.match(/\.(png|jpe?g|gif|webp)$/i) ? (
-                <img
-                  src={previewSource}
-                  alt={preview.sourceFilename || "Invoice preview"}
-                  style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 12 }}
-                />
-              ) : (
-                <iframe
-                  src={previewSource}
-                  title={preview.sourceFilename || "Invoice preview"}
-                  style={{ width: "100%", height: "100%", border: "none", borderRadius: 12 }}
-                />
-              )
-            ) : (
-              "Invoice image or PDF preview"
-            )}
-          </div>
-
-          <section className={styles.accountSection}>
-            <div className={styles.accountPrimary}>
-              <span>{preview.vendor}</span>
-              <span className={styles.accountBadge}>{analysis ? "AI suggested" : "From invoice"}</span>
-            </div>
-            <div className={styles.accountOptions}>
-              <button type="button">Acme Holdings</button>
-              <button type="button">Bluewave Retail</button>
-              <button type="button">New company…</button>
-            </div>
-          </section>
-
-          {analysis && (
-            <BookingDropdown
-              analysis={analysis}
+        <button type="button" className={styles.helpButton}>
+          Help
+        </button>
+      </header>
+      <div className={styles.content}>
+        <div className={styles.mainColumn}>
+          <section className={styles.primaryCard}>
+            <UploadForm
+              onAnalyze={onAnalyze}
+              profiles={profiles}
+              profilesLoaded={profilesLoaded}
+              onProfilesChange={onProfilesChange}
               selectedAccount={selectedAccount}
-              onAccountChange={onSelectAccount}
+              onSelectAccount={onSelectAccount}
+              onUploadComplete={onUploadComplete}
+              analysis={analysis}
+              fallbackInvoice={fallbackInvoice}
+              profileError={profileError}
             />
-          )}
-
-          <section className={styles.panelSection}>
-            <h4>Invoice details</h4>
-            <dl className={styles.detailGrid}>
-              <div>
-                <dt>Vendor</dt>
-                <dd>{preview.vendor}</dd>
-              </div>
-              <div>
-                <dt>Invoice Date</dt>
-                <dd>{preview.receivedDate}</dd>
-              </div>
-              <div>
-                <dt>Total</dt>
-                <dd>{formatCurrency(preview.total, preview.currency)}</dd>
-              </div>
-              <div>
-                <dt>Currency</dt>
-                <dd>{preview.currency}</dd>
-              </div>
-              <div>
-                <dt>Invoice #</dt>
-                <dd>{preview.invoiceNumber}</dd>
-              </div>
-              <div>
-                <dt>Status</dt>
-                <dd>{analysis ? "Pending review" : "Awaiting upload"}</dd>
-              </div>
-            </dl>
+            {profileError && <p className={styles.inlineError}>{profileError}</p>}
           </section>
 
-          <section className={styles.panelSection}>
-            <h4>Line items</h4>
-            <div className={styles.lineItems}>
-              <div className={styles.lineItemsHeader}>
-                <span>Description</span>
-                <span>Qty</span>
-                <span>Unit price</span>
-              </div>
-              {preview.lineItems.length === 0 && (
-                <div className={styles.lineItemRow}>No line items captured.</div>
-              )}
-              {preview.lineItems.map((item, index) => (
-                <div key={`${item.description || index}`} className={styles.lineItemRow}>
-                  <span>{item.description || `Line ${index + 1}`}</span>
-                  <span>{item.quantity ?? "—"}</span>
-                  <span>{formatCurrency(item.unitPrice, preview.currency)}</span>
-                </div>
-              ))}
+          <section className={styles.secondaryCard}>
+            <div className={styles.sectionHeader}>
+              <h2>Recently Added</h2>
+              <button type="button" className={styles.viewAllButton}>
+                View all
+              </button>
             </div>
-          </section>
-
-          <section className={styles.panelSection}>
-            <h4>Sender (From)</h4>
-            <div className={styles.addressBlock}>{preview.addressFrom}</div>
-            <h4>Receiver (To)</h4>
-            <div className={styles.addressBlock}>{preview.addressTo}</div>
-          </section>
-
-          <section className={styles.panelSection}>
-            <h4>Contacts</h4>
-            <div className={styles.contactGrid}>
-              <div>
-                <dt>Phone</dt>
-                <dd>{preview.contactPhone}</dd>
-              </div>
-              <div>
-                <dt>Email</dt>
-                <dd>{preview.contactEmail}</dd>
-              </div>
-            </div>
-          </section>
-
-          <div className={styles.previewActionsFooter}>
-            <button type="button" className={styles.secondaryButton}>
-              Discard
-            </button>
-            <button type="button" className={styles.primaryButton}>
-              Confirm
-            </button>
-          </div>
-        </div>
-
-        <div className={styles.card}>
-          <div className={styles.cardHeader}>
-            <h3>Capture Tips</h3>
-          </div>
-          <div className={styles.tipList}>
-            {captureTips.map((tip) => (
-              <div key={tip} className={styles.tipItem}>
-                {tip}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className={styles.card}>
-          <div className={styles.cardHeader}>
-            <h3>Inbox Rules</h3>
-          </div>
-          <div className={styles.ruleList}>
-            {inboxRules.map((rule) => (
-              <div key={rule.rule} className={styles.ruleItem}>
-                <strong>{rule.rule}</strong>
-                <div>Folder: {rule.folder}</div>
-                <div>Action: {rule.action}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </aside>
-
-      <section className={styles.card}>
-        <div className={styles.cardHeader}>
-          <h3>Recently Added</h3>
-          <button type="button" className={styles.viewAllButton}>
-            View all
-          </button>
-        </div>
-        <table className={styles.recentTable}>
-          <thead>
-            <tr>
-              <th>File</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {recentUploads.length === 0 ? (
-              <tr>
-                <td colSpan={3}>No uploads yet.</td>
-              </tr>
-            ) : (
-              recentUploads.map((upload) => (
-                <tr key={upload.id}>
-                  <td>{upload.filename}</td>
-                  <td>
-                    <span
-                      className={`${styles.statusBadge} ${
-                        upload.status === "Processing" ? styles.statusProcessing : styles.statusReady
-                      }`}
-                    >
-                      {upload.status}
-                    </span>
-                  </td>
-                  <td>
-                    <button type="button" className={styles.actionButton}>
-                      {upload.action || "View"}
-                    </button>
-                  </td>
+            <table className={styles.recentTable}>
+              <thead>
+                <tr>
+                  <th>File</th>
+                  <th>Status</th>
+                  <th>Actions</th>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </section>
+              </thead>
+              <tbody>
+                {recentUploads.length === 0 ? (
+                  <tr>
+                    <td colSpan={3}>No uploads yet.</td>
+                  </tr>
+                ) : (
+                  recentUploads.map((upload) => (
+                    <tr key={upload.id}>
+                      <td>
+                        <div className={styles.fileName}>{upload.filename}</div>
+                        {upload.details && <div className={styles.fileMeta}>{upload.details}</div>}
+                      </td>
+                      <td>
+                        <span className={`${styles.statusBadge} ${getUploadStatusClass(upload.status)}`}>
+                          {upload.status}
+                        </span>
+                      </td>
+                      <td>
+                        <button type="button" className={styles.actionButton}>
+                          {upload.action || "View"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </section>
+        </div>
+
+        <aside className={styles.previewColumn}>
+          <PreviewPanel
+            analysis={analysis}
+            fallbackInvoice={fallbackInvoice}
+            selectedAccount={selectedAccount}
+            onGoToBookings={onGoToBookings}
+          />
+        </aside>
+      </div>
     </div>
   );
 }

@@ -1,5 +1,45 @@
 // components/UploadForm.js
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import styles from "./UploadForm.module.css";
+
+const formatCurrency = (value, currency = "EUR") => {
+  if (value === null || value === undefined || value === "") return "—";
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return String(value);
+  try {
+    return new Intl.NumberFormat("en-IE", {
+      style: "currency",
+      currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return `${amount.toFixed(2)} ${currency}`;
+  }
+};
+
+const prettyPrint = (value) => {
+  if (value === null || value === undefined) return "—";
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch (err) {
+    return String(value);
+  }
+};
+
+function formatAddress(entity) {
+  if (!entity) return "";
+  if (entity.adres_volledig) return entity.adres_volledig;
+  const parts = [
+    entity.straat,
+    entity.huisnummer,
+    entity.postcode,
+    entity.plaats,
+    entity.provincie_of_staat || entity.regio,
+    entity.land,
+  ].filter(Boolean);
+  return parts.join(" ") || entity.adres || "";
+}
 
 export default function UploadForm({
   onAnalyze,
@@ -9,17 +49,29 @@ export default function UploadForm({
   selectedAccount,
   onSelectAccount,
   onUploadComplete,
+  analysis,
 }) {
   const [file, setFile] = useState(null);
   const [uploadedFileMeta, setUploadedFileMeta] = useState(null);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
-  const [extraInfo, setExtraInfo] = useState("");
   const [selectedProfileId, setSelectedProfileId] = useState("");
   const [splitMode, setSplitMode] = useState(false);
   const [lineAssignments, setLineAssignments] = useState([]);
   const [bookingState, setBookingState] = useState("idle");
   const [bookingMessage, setBookingMessage] = useState("");
+  const [dragActive, setDragActive] = useState(false);
+  const [emailCopied, setEmailCopied] = useState(false);
+  const demoLoadedRef = useRef(false);
+
+  const fileInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
+
+  useEffect(() => {
+    if (!emailCopied) return undefined;
+    const timer = setTimeout(() => setEmailCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [emailCopied]);
 
   const topChoice = useMemo(() => {
     if (!data?.ai_ranking?.scores) return null;
@@ -35,7 +87,11 @@ export default function UploadForm({
   const applyAnalysisResult = (azData, fileMeta = null) => {
     if (!azData) return;
 
-    setData(azData);
+    const enrichedData = fileMeta
+      ? { ...(data || {}), ...azData, file: fileMeta }
+      : { ...(data || {}), ...azData };
+
+    setData(enrichedData);
     setBookingState("idle");
     setBookingMessage("");
 
@@ -43,30 +99,30 @@ export default function UploadForm({
       setUploadedFileMeta(fileMeta);
     }
 
-    if (Array.isArray(azData.profiles) && typeof onProfilesChange === "function") {
-      onProfilesChange(azData.profiles);
+    if (Array.isArray(enrichedData.profiles) && typeof onProfilesChange === "function") {
+      onProfilesChange(enrichedData.profiles);
     }
 
-    const suggestedProfile = azData?.profile_suggestion?.profileId
-      ? String(azData.profile_suggestion.profileId)
+    const suggestedProfile = enrichedData?.profile_suggestion?.profileId
+      ? String(enrichedData.profile_suggestion.profileId)
       : "";
     setSelectedProfileId(suggestedProfile);
 
-    const defaultAssignments = Array.isArray(azData?.factuurdetails?.regels)
-      ? azData.factuurdetails.regels.map(() => suggestedProfile)
+    const defaultAssignments = Array.isArray(enrichedData?.factuurdetails?.regels)
+      ? enrichedData.factuurdetails.regels.map(() => suggestedProfile)
       : [];
     setLineAssignments(defaultAssignments);
     setSplitMode(false);
 
     if (typeof onSelectAccount === "function") {
       const suggestedAccount =
-        azData?.ai_ranking?.keuze_nummer || azData?.db_candidates?.[0]?.number || "";
+        enrichedData?.ai_ranking?.keuze_nummer || enrichedData?.db_candidates?.[0]?.number || "";
       onSelectAccount(suggestedAccount || "");
     }
 
     if (typeof onAnalyze === "function") {
       try {
-        onAnalyze(azData);
+        onAnalyze(enrichedData);
       } catch (callbackErr) {
         console.warn("onAnalyze callback threw", callbackErr);
       }
@@ -74,7 +130,7 @@ export default function UploadForm({
 
     if (typeof onUploadComplete === "function" && fileMeta) {
       try {
-        onUploadComplete(fileMeta, azData);
+        onUploadComplete(fileMeta, enrichedData);
       } catch (callbackErr) {
         console.warn("onUploadComplete callback threw", callbackErr);
       }
@@ -104,6 +160,97 @@ export default function UploadForm({
     }
   }
 
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    if (demoLoadedRef.current) return;
+    if (data || analysis) return;
+    demoLoadedRef.current = true;
+    handleLoadDummy();
+  }, [data, analysis]);
+
+  useEffect(() => {
+    if (!analysis) return;
+    setData((prev) => ({ ...(prev || {}), ...analysis }));
+  }, [analysis]);
+
+  const inboxAddress = "inbox@aiutofin.app";
+
+  const handleFileSelection = (selectedFile) => {
+    if (selectedFile) {
+      setFile(selectedFile);
+    } else {
+      setFile(null);
+    }
+  };
+
+  const handleFileInputChange = (event) => {
+    const selected = event.target.files?.[0];
+    handleFileSelection(selected || null);
+  };
+
+  const handleCameraInputChange = (event) => {
+    const selected = event.target.files?.[0];
+    handleFileSelection(selected || null);
+  };
+
+  const openFilePicker = (event) => {
+    if (event?.stopPropagation) event.stopPropagation();
+    fileInputRef.current?.click();
+  };
+
+  const openCameraPicker = (event) => {
+    if (event?.stopPropagation) event.stopPropagation();
+    cameraInputRef.current?.click();
+  };
+
+  const handleDragOver = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!dragActive) setDragActive(true);
+  };
+
+  const handleDragLeave = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setDragActive(false);
+  };
+
+  const handleDrop = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setDragActive(false);
+    const dropped = event.dataTransfer?.files?.[0];
+    if (dropped) {
+      handleFileSelection(dropped);
+    }
+  };
+
+  const clearSelectedFile = () => {
+    handleFileSelection(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+    if (cameraInputRef.current) {
+      cameraInputRef.current.value = "";
+    }
+  };
+
+  const formatFileSize = (size) => {
+    if (!size && size !== 0) return "";
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const handleCopyInbox = async () => {
+    try {
+      await navigator.clipboard.writeText(inboxAddress);
+      setEmailCopied(true);
+    } catch (err) {
+      console.error("[clipboard] failed", err);
+    }
+  };
+
   async function handleSubmit(e) {
     e.preventDefault();
     if (!file) return;
@@ -123,10 +270,7 @@ export default function UploadForm({
       const az = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          file: upData,
-          extraText: extraInfo.trim() || undefined,
-        }),
+        body: JSON.stringify({ file: upData }),
       });
       if (!az.ok) {
         const errorText = await az.text();
@@ -144,6 +288,53 @@ export default function UploadForm({
     return Array.isArray(data?.factuurdetails?.regels) ? data.factuurdetails.regels : [];
   }, [data]);
 
+  const invoiceDetails = data?.factuurdetails || {};
+  const totals = invoiceDetails?.totaal || {};
+  const summaryCards = [
+    { label: "Vendor", value: invoiceDetails?.afzender?.naam || "—" },
+    {
+      label: "Invoice total",
+      value:
+        totals?.totaal_incl_btw != null
+          ? formatCurrency(totals.totaal_incl_btw, totals?.valuta || "EUR")
+          : "—",
+    },
+    { label: "Status", value: invoiceDetails?.betaalstatus || data?.status || "—" },
+    {
+      label: "Paid amount",
+      value:
+        invoiceDetails?.betaald_bedrag != null
+          ? formatCurrency(invoiceDetails.betaald_bedrag, totals?.valuta || "EUR")
+          : totals?.totaal_incl_btw != null
+          ? formatCurrency(totals.totaal_incl_btw, totals?.valuta || "EUR")
+          : "—",
+    },
+  ];
+
+  const paymentInfo = [
+    { label: "Invoice #", value: invoiceDetails.factuurnummer || "—" },
+    { label: "Invoice date", value: invoiceDetails.factuurdatum || "—" },
+    { label: "Due date", value: invoiceDetails.vervaldatum || "—" },
+    { label: "Payment method", value: invoiceDetails.betaling_methode || "—" },
+    { label: "Reference", value: invoiceDetails.betaal_referentie || "—" },
+    { label: "Cashier", value: invoiceDetails.kassier || "—" },
+    { label: "Point of sale", value: invoiceDetails.kassa_terminal || "—" },
+  ];
+
+  const transactionInfo = [
+    { label: "Merchant ID", value: invoiceDetails.merchant_id || "—" },
+    { label: "Transaction ID", value: invoiceDetails.transactie_id || "—" },
+    { label: "Purchase time", value: invoiceDetails.aankoop_tijd || "—" },
+    { label: "Payment time", value: invoiceDetails.betaal_tijd || invoiceDetails.aankoop_tijd || "—" },
+  ];
+
+  const miscInfo = [
+    { label: "Notes", value: invoiceDetails.opmerkingen || "—" },
+    { label: "Opening hours", value: invoiceDetails.openingstijden || "—" },
+    { label: "Payment reference", value: invoiceDetails.betaal_referentie || "—" },
+    { label: "POS terminal", value: invoiceDetails.kassa_terminal || "—" },
+  ];
+
   const recalculated = data?.herberekende_totalen || {};
   const sender = data?.factuurdetails?.afzender || {};
   const receiver = data?.factuurdetails?.ontvanger || {};
@@ -156,6 +347,65 @@ export default function UploadForm({
     ? profileSuggestion.ranked
     : [];
   const selectedProfile = profiles.find((p) => String(p.id) === selectedProfileId);
+  const totalsCurrency = totals?.valuta || "EUR";
+  const totalsInfo = [
+    {
+      label: "Subtotal",
+      value:
+        totals?.totaal_excl_btw != null
+          ? formatCurrency(totals.totaal_excl_btw, totalsCurrency)
+          : "—",
+    },
+    {
+      label: "Tax",
+      value:
+        totals?.btw != null ? formatCurrency(totals.btw, totalsCurrency) : "—",
+    },
+    {
+      label: "Total",
+      value:
+        totals?.totaal_incl_btw != null
+          ? formatCurrency(totals.totaal_incl_btw, totalsCurrency)
+          : "—",
+    },
+    { label: "Currency", value: totalsCurrency || "—" },
+  ];
+
+  const infoClusters = [
+    { title: "Payment", items: paymentInfo },
+    { title: "Transaction", items: transactionInfo },
+    { title: "Totals", items: totalsInfo },
+    { title: "Other Captured Info", items: miscInfo },
+  ];
+
+  const senderInfo = [
+    { label: "Name", value: sender.naam || "—" },
+    { label: "Address", value: formatAddress(sender) || "—" },
+    { label: "KvK", value: sender.kvk_nummer || "—" },
+    { label: "VAT", value: sender.btw_nummer || "—" },
+    { label: "Email", value: sender.email || "—" },
+    { label: "Phone", value: sender.telefoon || "—" },
+  ];
+
+  const receiverInfo = [
+    { label: "Name", value: receiver.naam || "—" },
+    { label: "Address", value: formatAddress(receiver) || "—" },
+    { label: "KvK", value: receiver.kvk_nummer || "—" },
+    { label: "VAT", value: receiver.btw_nummer || "—" },
+    {
+      label: "Account #",
+      value: receiver.klantnummer || receiver.debiteurnummer || "—",
+    },
+    { label: "Contact", value: receiver.email || receiver.telefoon || "—" },
+  ];
+
+  useEffect(() => {
+    const suggestedRaw = data?.profile_suggestion?.profileId;
+    if (suggestedRaw == null) return;
+    const suggestedId = String(suggestedRaw);
+    if (!profiles.some((p) => String(p.id) === suggestedId)) return;
+    setSelectedProfileId((prev) => (prev ? prev : suggestedId));
+  }, [data?.profile_suggestion?.profileId, profiles]);
   useEffect(() => {
     if (splitMode) return;
     if (!lineItems.length) {
@@ -311,88 +561,159 @@ export default function UploadForm({
     }
   };
 
-  const formatAddress = (entity) => {
-    if (!entity) return "";
-    if (entity.adres_volledig) return entity.adres_volledig;
-    const parts = [
-      entity.straat,
-      entity.huisnummer,
-      entity.postcode,
-      entity.plaats,
-      entity.provincie_of_staat || entity.regio,
-      entity.land,
-    ].filter(Boolean);
-    return parts.join(" ") || entity.adres || "";
-  };
-
   return (
-    <div className="bg-white shadow rounded p-6 space-y-6">
-      <form onSubmit={handleSubmit} className="space-y-3">
+    <div className={`${styles.wrapper}`}>
+      <form
+        onSubmit={handleSubmit}
+        className={styles.form}
+        onDragOver={handleDragOver}
+        onDragEnter={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
         <input
+          ref={fileInputRef}
           type="file"
           accept=".pdf,.png,.jpg,.jpeg,.heic,.heif,.heics,image/*"
-          onChange={(e) => setFile(e.target.files[0] || null)}
-          className="block w-full border rounded p-2"
+          onChange={handleFileInputChange}
+          className={styles.hiddenInput}
         />
-        <textarea
-          value={extraInfo}
-          onChange={(e) => setExtraInfo(e.target.value)}
-          placeholder="Optioneel: plak hier extra metadata of notities (bijv. handmatig overgenomen kassabon-details)."
-          className="block w-full border rounded p-2 text-sm"
-          rows={4}
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleCameraInputChange}
+          className={styles.hiddenInput}
         />
-        <button
-          type="submit"
-          disabled={loading || !file}
-          className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50"
+
+        <div
+          className={`${styles.dropzone} ${dragActive ? styles.dropzoneActive : ""}`}
+          onClick={openFilePicker}
+          onDragOver={handleDragOver}
+          onDragEnter={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
         >
-          {loading ? "Analyzing…" : "Upload & Analyze"}
-        </button>
-        <button
-          type="button"
-          onClick={handleLoadDummy}
-          disabled={loading}
-          className="px-4 py-2 bg-gray-200 text-gray-800 rounded disabled:opacity-50"
-        >
-          Gebruik dummy-invoice
-        </button>
+          <svg
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            focusable="false"
+            className={styles.dropzoneIcon}
+          >
+            <path
+              fill="currentColor"
+              d="M12 3a1 1 0 0 1 .78.375l4.5 5.5a1 1 0 1 1-1.56 1.25L13 7.74V16a1 1 0 1 1-2 0V7.74L8.28 10.13a1 1 0 0 1-1.56-1.25l4.5-5.5A1 1 0 0 1 12 3Zm-7 12a1 1 0 0 1 2 0v3h10v-3a1 1 0 1 1 2 0v3a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3v-3Z"
+            />
+          </svg>
+          <div className={styles.dropzoneTitle}>Drag &amp; drop invoice files</div>
+          <div className={styles.dropzoneHint}>PDF, PNG, JPG up to 25MB</div>
+          <button type="button" className={styles.browseButton} onClick={openFilePicker}>
+            Browse files
+          </button>
+        </div>
+
+        <div className={styles.quickActions}>
+          <div className={styles.quickCard}>
+            <div className={styles.quickCardTitle}>Use Camera</div>
+            <div className={styles.quickCardSubtitle}>Snap a photo of your receipt or invoice.</div>
+            <div className={styles.quickCardActions}>
+              <button type="button" className={styles.quickButton} onClick={openCameraPicker}>
+                Open
+              </button>
+            </div>
+          </div>
+          <div className={styles.quickCard}>
+            <div className={styles.quickCardTitle}>Email In</div>
+            <div className={styles.quickCardSubtitle}>
+              <span className={styles.inlineHelperText}>Forward invoices directly to Aiutofin.</span>
+              <span className={styles.emailBadge}>{inboxAddress}</span>
+            </div>
+            <div className={styles.quickCardActions}>
+              <button type="button" className={styles.quickButton} onClick={handleCopyInbox}>
+                Copy
+              </button>
+              {emailCopied && <span className={styles.copyBadge}>Copied!</span>}
+            </div>
+          </div>
+          <div className={styles.quickCard}>
+            <div className={styles.quickCardTitle}>Import from Mailbox</div>
+            <div className={styles.quickCardSubtitle}>Fetch invoices from a specific folder.</div>
+            <div className={styles.quickCardActions}>
+              <button
+                type="button"
+                className={styles.quickButton}
+                onClick={() => console.info("Mailbox import coming soon")}
+              >
+                Connect
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {file && (
+          <div className={styles.fileInfo}>
+            <div className={styles.fileName}>
+              <strong>{file.name}</strong>
+              <span>{formatFileSize(file.size)}</span>
+            </div>
+            <button type="button" className={styles.clearButton} onClick={clearSelectedFile}>
+              Remove
+            </button>
+          </div>
+        )}
+
+        <div className={styles.actionRow}>
+          <button type="submit" disabled={loading || !file} className={styles.primaryAction}>
+            {loading ? "Analyzing…" : "Upload & Analyze"}
+          </button>
+          <button
+            type="button"
+            onClick={handleLoadDummy}
+            disabled={loading}
+            className={styles.secondaryAction}
+          >
+            Load demo invoice
+          </button>
+        </div>
       </form>
 
       {data && (
-        <div className="space-y-6">
-          <section className="border rounded p-4 bg-gray-50 space-y-3">
-            <h2 className="text-lg font-semibold">📂 Profielkeuze</h2>
+        <div className={styles.extractedSection}>
+          <section className={`${styles.preselectCard} border rounded p-4 bg-gray-50 space-y-3`}>
+            <div className={styles.sectionHeading}>
+              <h2>Preselect Company & Details</h2>
+              {profileSuggestion && (
+                <span className={styles.matchBadge}>
+                  {Math.round((profileSuggestion.confidence ?? 0) * 100)}% match
+                </span>
+              )}
+            </div>
+            <p className={styles.sectionSubheading}>
+              Suggested profile: {selectedProfile?.name || "(none selected)"}
+            </p>
+            {profileSuggestion?.reason && (
+              <p className={styles.sectionNote}>{profileSuggestion.reason}</p>
+            )}
             {!profilesLoaded ? (
-              <p className="text-sm text-gray-600">Profielen laden...</p>
+              <p className="text-sm text-gray-600">Loading profiles…</p>
             ) : profiles.length === 0 ? (
               <p className="text-sm text-gray-600">
-                Nog geen profielen beschikbaar. Voeg eerst een bedrijfs- of persoonlijk profiel toe zodat facturen gekoppeld kunnen worden.
+                No profiles yet. Add a business or personal profile to route invoices automatically.
               </p>
             ) : (
               <div className="space-y-3">
-                {profileSuggestion && (
-                  <div className="text-sm text-gray-700">
-                    Aanbevolen profiel: {selectedProfile?.name || "(niet beschikbaar)"}
-                    {typeof profileSuggestion.confidence === "number" && (
-                      <span className="text-gray-500"> ({Math.round((profileSuggestion.confidence ?? 0) * 100)}% zeker)</span>
-                    )}
-                    {profileSuggestion.reason && (
-                      <p className="text-xs text-gray-500 mt-1">{profileSuggestion.reason}</p>
-                    )}
-                  </div>
-                )}
-
                 <div>
-                  <label className="block text-sm font-medium mb-1" htmlFor="upload-profile-select">
-                    Koppel aan profiel
+                  <label className={styles.fieldLabel} htmlFor="upload-profile-select">
+                    Company / Profile
                   </label>
                   <select
                     id="upload-profile-select"
-                    className="border rounded p-2 w-full"
+                    className={styles.fieldControl}
                     value={selectedProfileId}
                     onChange={(e) => setSelectedProfileId(e.target.value)}
                   >
-                    <option value="">— Kies profiel —</option>
+                    <option value="">— Select profile —</option>
                     {profiles.map((p) => (
                       <option key={p.id} value={String(p.id)}>
                         {p.name} ({p.type})
@@ -402,35 +723,37 @@ export default function UploadForm({
                 </div>
 
                 {profiles.length > 1 && (
-                  <div className="flex flex-wrap items-center gap-3 text-sm">
-                    <span>Bon splitsen over meerdere profielen?</span>
-                    <button
-                      type="button"
-                      onClick={handleToggleSplit}
-                      disabled={!lineItems.length}
-                      className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50"
-                    >
-                      {splitMode ? "Splitsen annuleren" : "Start splitsen"}
-                    </button>
-                    {splitMode && (
+                  <div className={styles.splitRow}>
+                    <span>Split invoice over multiple profiles?</span>
+                    <div className={styles.splitActions}>
                       <button
                         type="button"
-                        onClick={handleApplyProfileToAll}
-                        className="px-3 py-1 bg-gray-100 rounded hover:bg-gray-200"
+                        onClick={handleToggleSplit}
+                        disabled={!lineItems.length}
+                        className={styles.splitButton}
                       >
-                        Zet alles op geselecteerd profiel
+                        {splitMode ? "Cancel split" : "Start split"}
                       </button>
-                    )}
+                      {splitMode && (
+                        <button
+                          type="button"
+                          onClick={handleApplyProfileToAll}
+                          className={styles.secondarySplitButton}
+                        >
+                          Apply selected profile to all lines
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
 
                 {rankedProfiles.length > 0 && (
-                  <div className="text-xs text-gray-500 space-y-1">
-                    <div className="font-medium text-gray-600">AI-ranking</div>
-                    <ul className="list-disc list-inside space-y-1">
+                  <div className={styles.rankList}>
+                    <div className={styles.rankListTitle}>AI profile ranking</div>
+                    <ul>
                       {rankedProfiles.map((r) => (
                         <li key={r.profileId}>
-                          {r.name || `Profiel ${r.profileId}`} – {Math.round((r.probability ?? 0) * 100)}%
+                          {r.name || `Profile ${r.profileId}`} – {Math.round((r.probability ?? 0) * 100)}%
                           {r.reason ? ` • ${r.reason}` : ""}
                         </li>
                       ))}
@@ -442,189 +765,272 @@ export default function UploadForm({
           </section>
 
           {/* FACTUURDETAILS */}
-          <section>
-            <h2 className="text-lg font-semibold mb-2">📑 Factuurdetails</h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              {/* Afzender */}
-              <div className="border rounded p-3">
-                <h3 className="font-medium mb-1">Afzender</h3>
-                <div>Naam: {sender.naam || "-"}</div>
-                <div>Adres: {formatAddress(sender) || "-"}</div>
-                <div>Postcode/Plaats: {sender.postcode || "-"} {sender.plaats || ""}</div>
-                <div>Regio/Provincie: {sender.provincie_of_staat || sender.regio || "-"}</div>
-                <div>Land: {sender.land || "-"}</div>
-                <div>KvK: {sender.kvk_nummer || "-"}</div>
-                <div>BTW: {sender.btw_nummer || "-"}</div>
-                <div>Email: {sender.email || "-"}</div>
-                <div>Telefoon: {sender.telefoon || "-"}</div>
-              </div>
-
-              {/* Ontvanger */}
-              <div className="border rounded p-3">
-                <h3 className="font-medium mb-1">Ontvanger</h3>
-                <div>Naam: {receiver.naam || "-"}</div>
-                <div>Adres: {formatAddress(receiver) || "-"}</div>
-                <div>Postcode/Plaats: {receiver.postcode || "-"} {receiver.plaats || ""}</div>
-                <div>Regio/Provincie: {receiver.provincie_of_staat || receiver.regio || "-"}</div>
-                <div>Land: {receiver.land || "-"}</div>
-                <div>KvK: {receiver.kvk_nummer || "-"}</div>
-                <div>BTW: {receiver.btw_nummer || "-"}</div>
-                <div>Relatienummer: {receiver.klantnummer || receiver.debiteurnummer || "-"}</div>
-                <div>Email: {receiver.email || "-"}</div>
-                <div>Telefoon: {receiver.telefoon || "-"}</div>
+          <details className={styles.dropdownCard}>
+            <summary className={styles.dropdownSummary}>
+              <span>Invoice Overview</span>
+              <span className={styles.dropdownChevron}>▾</span>
+            </summary>
+            <div className={styles.dropdownBody}>
+              <div className={styles.summaryGrid}>
+                {summaryCards.map((card) => (
+                  <div key={card.label} className={styles.summaryCard}>
+                    <span className={styles.summaryLabel}>{card.label}</span>
+                    <span className={styles.summaryValue}>{card.value}</span>
+                  </div>
+                ))}
               </div>
             </div>
+          </details>
 
-            {/* Invoice meta */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mt-3">
-              <div className="border rounded p-3">
-                <div>Factuurnummer: {data.factuurdetails?.factuurnummer || "-"}</div>
-                <div>Datum: {data.factuurdetails?.factuurdatum || "-"}</div>
-                <div>Vervaldatum: {data.factuurdetails?.vervaldatum || "-"}</div>
-                <div>Betaalstatus: {data.factuurdetails?.betaalstatus || "-"}</div>
-                <div>Betaalmethode: {data.factuurdetails?.betaling_methode || "-"}</div>
-                <div>Kassier: {data.factuurdetails?.kassier || "-"}</div>
-                <div>POS/Kassa: {data.factuurdetails?.kassa_terminal || "-"}</div>
-                <div>Merchant-ID: {data.factuurdetails?.merchant_id || "-"}</div>
-                <div>Transactie-ID: {data.factuurdetails?.transactie_id || "-"}</div>
-                <div>Betalingsref.: {data.factuurdetails?.betaal_referentie || "-"}</div>
-                <div>Aankoop tijd: {data.factuurdetails?.aankoop_tijd || "-"}</div>
-                <div>Betaal tijd: {data.factuurdetails?.betaal_tijd || data.factuurdetails?.aankoop_tijd || "-"}</div>
+          <section className={styles.dropdownGrid}>
+            <details className={styles.dropdownCard}>
+              <summary className={styles.dropdownSummary}>
+                <span>Sender (Vendor)</span>
+                <span className={styles.dropdownChevron}>▾</span>
+              </summary>
+              <div className={styles.dropdownBody}>
+                <div className={styles.infoList}>
+                  {senderInfo.map((item) => (
+                    <div key={`sender-${item.label}`} className={styles.infoItem}>
+                      <span className={styles.infoLabel}>{item.label}</span>
+                      <span className={styles.infoValue}>{item.value || "—"}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="border rounded p-3">
-                <div>Totaal excl. BTW: {data.factuurdetails?.totaal?.totaal_excl_btw ?? "-"}</div>
-                <div>BTW: {data.factuurdetails?.totaal?.btw ?? "-"}</div>
-                <div>Totaal incl. BTW: {data.factuurdetails?.totaal?.totaal_incl_btw ?? "-"}</div>
-                <div>Valuta: {data.factuurdetails?.totaal?.valuta || "-"}</div>
-                <div>Betaald bedrag: {data.factuurdetails?.betaald_bedrag || data.factuurdetails?.totaal?.totaal_incl_btw || "-"}</div>
-              </div>
-              <div className="border rounded p-3">
-                <div>Opmerkingen: {data.factuurdetails?.opmerkingen || "-"}</div>
-                <div>Openingstijden: {data.factuurdetails?.openingstijden || "-"}</div>
-              </div>
-            </div>
+            </details>
 
-            {/* Loyalty */}
-            <div className="border rounded p-3 text-sm mt-3 space-y-1">
-              <h3 className="font-medium">Loyalty &amp; Kortingen</h3>
-              <div>Bonuskaart: {loyalty.bonuskaart_nummer || "-"}</div>
-              <div>Bonus voordeel: {loyalty.bonus_voordeel || "-"}</div>
-              <div>Bonus Box: {loyalty.bonus_box || "-"}</div>
-              <div>
-                Spaaracties:
-                {spaaracties.length === 0 ? (
-                  <span className="ml-1">-</span>
-                ) : (
-                  <ul className="list-disc list-inside">
-                    {spaaracties.map((s, idx) => {
-                      const parts = [s.type, s.aantal, s.waarde].filter(Boolean).join(" · ");
-                      return <li key={idx}>{parts || "-"}</li>;
-                    })}
+            <details className={styles.dropdownCard}>
+              <summary className={styles.dropdownSummary}>
+                <span>Receiver (Your company)</span>
+                <span className={styles.dropdownChevron}>▾</span>
+              </summary>
+              <div className={styles.dropdownBody}>
+                <div className={styles.infoList}>
+                  {receiverInfo.map((item) => (
+                    <div key={`receiver-${item.label}`} className={styles.infoItem}>
+                      <span className={styles.infoLabel}>{item.label}</span>
+                      <span className={styles.infoValue}>{item.value || "—"}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </details>
+          </section>
+
+          {(loyalty.bonuskaart_nummer || spaaracties.length > 0 || loyalty.bonus_box || loyalty.bonus_voordeel) && (
+            <details className={styles.dropdownCard}>
+              <summary className={styles.dropdownSummary}>
+                <span>Loyalty &amp; Discounts</span>
+                <span className={styles.dropdownChevron}>▾</span>
+              </summary>
+              <div className={styles.dropdownBody}>
+                <div className={styles.infoGrid}>
+                  <div className={styles.infoItem}>
+                    <span className={styles.infoLabel}>Bonus card</span>
+                    <span className={styles.infoValue}>{loyalty.bonuskaart_nummer || "—"}</span>
+                  </div>
+                  <div className={styles.infoItem}>
+                    <span className={styles.infoLabel}>Bonus savings</span>
+                    <span className={styles.infoValue}>{loyalty.bonus_voordeel || "—"}</span>
+                  </div>
+                  <div className={styles.infoItem}>
+                    <span className={styles.infoLabel}>Bonus Box</span>
+                    <span className={styles.infoValue}>{loyalty.bonus_box || "—"}</span>
+                  </div>
+                </div>
+                {spaaracties.length > 0 && (
+                  <ul className={styles.loyaltyList}>
+                    {spaaracties.map((actie, idx) => (
+                      <li key={idx}>
+                        {(actie.type || "Action") + ": " + (actie.aantal || actie.waarde || "—")}
+                      </li>
+                    ))}
                   </ul>
                 )}
               </div>
+            </details>
+          )}
+
+          {/* LINE ITEMS */}
+          <section className={styles.sectionBlock}>
+            <div className={styles.sectionHeaderRow}>
+              <h2>Line Items</h2>
+              {lineItems.length > 0 && (
+                <span className={styles.sectionHint}>
+                  {lineItems.length} item{lineItems.length === 1 ? "" : "s"}
+                  {splitMode ? " • split mode" : ""}
+                </span>
+              )}
             </div>
 
-            {/* Regels */}
-            <div className="mt-3">
-              <h3 className="font-medium mb-1">Regels</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm border rounded">
-                  <thead className="bg-gray-100">
-                    <tr>
-                      <th className="text-left p-2">Productcode</th>
-                      <th className="text-left p-2">Omschrijving</th>
-                      {splitMode && <th className="text-left p-2">Profiel</th>}
-                      <th className="text-left p-2">Categorie</th>
-                      <th className="text-left p-2">Subcategorie</th>
-                      <th className="text-right p-2">Aantal</th>
-                      <th className="text-left p-2">Eenheid</th>
-                      <th className="text-right p-2">Prijs excl.</th>
-                      <th className="text-right p-2">BTW%</th>
-                      <th className="text-right p-2">BTW €</th>
-                      <th className="text-right p-2">Totaal excl.</th>
-                      <th className="text-right p-2">Totaal incl.</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lineItems.map((r, i) => {
-                      const productCode = r.productcode || r.product_code || "";
-                      const quantity = r.aantal ?? r.quantity ?? "";
-                      const unit = r.eenheid ?? r.unit ?? "";
-                      const unitPrice = r.prijs_per_eenheid_excl ?? r.prijs ?? r.unit_price_excl ?? r.prijs_excl ?? "";
-                      const vatPerc = r.btw_percentage ?? r.btw_perc ?? "";
-                      const vatAmount = r.btw_bedrag ?? r.vat_amount ?? "";
-                      const totalExcl = r.totaal_excl ?? r.bedrag_excl ?? "";
-                      const totalIncl = r.totaal_incl ?? r.bedrag_incl ?? "";
-                      const category = r.categorie ?? r.category ?? "";
-                      const subcategory = r.subcategorie ?? r.subcategory ?? "";
-                      return (
-                        <tr key={i} className="border-t">
-                          <td className="p-2">{productCode}</td>
-                          <td className="p-2">{r.omschrijving ?? r.description ?? ""}</td>
-                          {splitMode && (
-                            <td className="p-2">
-                              <select
-                                className="border rounded p-1 text-sm"
-                                value={lineAssignments[i] || ""}
-                                onChange={(e) => handleLineAssignmentChange(i, e.target.value)}
-                              >
-                                <option value="">— kies profiel —</option>
-                                {profiles.map((p) => (
-                                  <option key={p.id} value={String(p.id)}>
-                                    {p.name}
-                                  </option>
-                                ))}
-                              </select>
+          {lineItems.length === 0 ? (
+            <div className={styles.emptyState}>No line items captured.</div>
+          ) : (
+              <div className={styles.lineItemSection}>
+                <div className={styles.lineItemTableWrapper}>
+                  <table className={styles.lineItemTable}>
+                    <thead>
+                      <tr>
+                        <th><span className={styles.labelWrap}>Code</span></th>
+                        <th><span className={styles.labelWrap}>Description</span></th>
+                        <th className={styles.numeric}><span className={styles.labelWrap}>Qty</span></th>
+                        <th><span className={styles.labelWrap}>Unit</span></th>
+                        <th className={styles.numeric}><span className={styles.labelWrap}>Unit Price</span></th>
+                        <th className={styles.numeric}><span className={styles.labelWrap}>VAT %</span></th>
+                        <th className={styles.numeric}><span className={styles.labelWrap}>VAT Amount</span></th>
+                        <th className={styles.numeric}><span className={styles.labelWrap}>Subtotal</span></th>
+                        <th className={styles.numeric}><span className={styles.labelWrap}>Total</span></th>
+                        <th><span className={styles.labelWrap}>Category</span></th>
+                        <th><span className={styles.labelWrap}>Sub<br />category</span></th>
+                        <th className={styles.profileHead}><span className={styles.labelWrap}>Profile</span></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lineItems.map((item, idx) => {
+                        const assignedProfile = splitMode ? lineAssignments[idx] || "" : selectedProfileId || "";
+                        const profileLabel = splitMode
+                          ? profiles.find((p) => String(p.id) === String(assignedProfile))?.name ||
+                            (assignedProfile ? `Profile ${assignedProfile}` : "No profile")
+                          : profiles.find((p) => String(p.id) === String(assignedProfile))?.name || selectedProfile?.name || "No profile";
+                        const quantity = toNumeric(item.aantal ?? item.quantity);
+                        const unitLabel = item.eenheid ?? item.unit ?? "";
+                        const unitPrice = toNumeric(
+                          item.prijs_per_eenheid_excl ?? item.prijs ?? item.unit_price_excl ?? item.prijs_excl
+                        );
+                        const totalExcl = toNumeric(item.totaal_excl ?? item.bedrag_excl);
+                        const totalIncl = toNumeric(item.totaal_incl ?? item.bedrag_incl);
+                        const vatRate = toNumeric(item.btw_percentage ?? item.btw_perc);
+                        const vatAmount = toNumeric(item.btw_bedrag ?? item.vat_amount);
+                        const category = item.categorie || item.category || "—";
+                        const subcategory = item.subcategorie || item.subcategory || "—";
+
+                        return (
+                          <tr key={`summary-${idx}`}>
+                            <td>{item.productcode || item.barcode || item.artikelnummer || "—"}</td>
+                            <td>{item.omschrijving || item.description || `Line ${idx + 1}`}</td>
+                            <td className={styles.numeric}>{quantity != null ? quantity : "—"}</td>
+                            <td>{unitLabel || "—"}</td>
+                            <td className={styles.numeric}>
+                              {unitPrice != null ? formatCurrency(unitPrice, totals?.valuta || "EUR") : "—"}
                             </td>
-                          )}
-                          <td className="p-2">{category}</td>
-                          <td className="p-2">{subcategory}</td>
-                          <td className="p-2 text-right">{quantity}</td>
-                          <td className="p-2">{unit}</td>
-                          <td className="p-2 text-right">{unitPrice}</td>
-                          <td className="p-2 text-right">{vatPerc}</td>
-                          <td className="p-2 text-right">{vatAmount}</td>
-                          <td className="p-2 text-right">{totalExcl}</td>
-                          <td className="p-2 text-right">{totalIncl}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            {splitMode && splitSummaryEntries.length > 0 && (
-              <div className="mt-2 text-sm text-gray-700">
-                <div className="font-medium">Verdeling</div>
-                <ul className="list-disc list-inside">
-                  {splitSummaryEntries.map((entry) => (
-                    <li key={entry.profileId || "__none"}>
-                      {entry.name}: {entry.lines} regel(s), €{entry.total.toFixed(2)}
-                    </li>
-                  ))}
-                </ul>
-                {splitSummaryEntries.some((entry) => !entry.profileId) && (
-                  <p className="text-xs text-red-600 mt-1">
-                    Let op: sommige regels zijn nog niet gekoppeld aan een profiel.
-                  </p>
-                )}
-              </div>
-            )}
-            {recalculated && (recalculated.totaal_excl || recalculated.totaal_incl) && (
-              <div className="mt-2 text-sm text-gray-700">
-                <div className="font-medium">Herberekende totalen</div>
-                <div>Totaal excl.: {recalculated.totaal_excl ?? "-"}</div>
-                <div>Totaal btw: {recalculated.totaal_btw ?? "-"}</div>
-                <div>Totaal incl.: {recalculated.totaal_incl ?? "-"}</div>
-                {recalculated.komt_overeen_met_ticket === false && (
-                  <div className="text-red-600">Afwijking: {recalculated.verschil || "verschil gedetecteerd"}</div>
-                )}
+                            <td className={styles.numeric}>{vatRate != null ? `${vatRate}%` : "—"}</td>
+                            <td className={styles.numeric}>
+                              {vatAmount != null ? formatCurrency(vatAmount, totals?.valuta || "EUR") : "—"}
+                            </td>
+                            <td className={styles.numeric}>
+                              {totalExcl != null ? formatCurrency(totalExcl, totals?.valuta || "EUR") : "—"}
+                            </td>
+                            <td className={styles.numeric}>
+                              {totalIncl != null ? formatCurrency(totalIncl, totals?.valuta || "EUR") : "—"}
+                            </td>
+                            <td>{category}</td>
+                            <td>{subcategory}</td>
+                            <td className={styles.profileCell}>
+                              {splitMode ? (
+                                <select
+                                  className={styles.profileSelectInline}
+                                  value={lineAssignments[idx] || ""}
+                                  onChange={(e) => handleLineAssignmentChange(idx, e.target.value)}
+                                >
+                                  <option value="">— select profile —</option>
+                                  {profiles.map((p) => (
+                                    <option key={p.id} value={String(p.id)}>
+                                      {p.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                profileLabel
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
               </div>
             )}
           </section>
 
+          {infoClusters.map((cluster) => (
+            <details key={cluster.title} className={styles.dropdownCard}>
+              <summary className={styles.dropdownSummary}>
+                <span>{cluster.title}</span>
+                <span className={styles.dropdownChevron}>▾</span>
+              </summary>
+              <div className={styles.dropdownBody}>
+                <div className={styles.infoGrid}>
+                  {cluster.items.map((item) => (
+                    <div key={`${cluster.title}-${item.label}`} className={styles.infoItem}>
+                      <span className={styles.infoLabel}>{item.label}</span>
+                      <span className={styles.infoValue}>{item.value || "—"}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </details>
+          ))}
+
+          {/* CAPTURED RAW DATA */}
+          <section className="grid gap-4 md:grid-cols-2">
+            <details className="border rounded-xl bg-white shadow-sm p-4 text-sm text-gray-700" open>
+              <summary className="font-semibold text-gray-900 cursor-pointer">📦 Captured invoice JSON</summary>
+              <pre className="mt-3 p-3 bg-gray-100 rounded whitespace-pre-wrap max-h-72 overflow-auto">
+                {prettyPrint(invoiceDetails)}
+              </pre>
+            </details>
+            <details className="border rounded-xl bg-white shadow-sm p-4 text-sm text-gray-700">
+              <summary className="font-semibold text-gray-900 cursor-pointer">🧾 Gestandaardiseerde output</summary>
+              <pre className="mt-3 p-3 bg-gray-100 rounded whitespace-pre-wrap max-h-72 overflow-auto">
+                {prettyPrint(data.structured || data.factuurdetails)}
+              </pre>
+            </details>
+            <details className="border rounded-xl bg-white shadow-sm p-4 text-sm text-gray-700">
+              <summary className="font-semibold text-gray-900 cursor-pointer">🧠 AI ranking details</summary>
+              <pre className="mt-3 p-3 bg-gray-100 rounded whitespace-pre-wrap max-h-72 overflow-auto">
+                {prettyPrint(data.ai_ranking)}
+              </pre>
+            </details>
+            <details className="border rounded-xl bg-white shadow-sm p-4 text-sm text-gray-700">
+              <summary className="font-semibold text-gray-900 cursor-pointer">📚 DB candidates (raw)</summary>
+              <pre className="mt-3 p-3 bg-gray-100 rounded whitespace-pre-wrap max-h-72 overflow-auto">
+                {prettyPrint(data.db_candidates)}
+              </pre>
+            </details>
+          </section>
+
+          <section className="grid gap-4 lg:grid-cols-2">
+            <div className="border rounded-xl bg-white shadow-sm p-4 space-y-2">
+              <h2 className="text-lg font-semibold text-gray-900">🤖 AI Suggesties</h2>
+              {Array.isArray(data.ai_first_suggestions) && data.ai_first_suggestions.length > 0 ? (
+                <ul className="space-y-2 text-sm text-gray-700">
+                  {data.ai_first_suggestions.map((s, i) => (
+                    <li key={i} className="border rounded-lg bg-gray-50 p-3">
+                      <div className="font-medium">{s.naam || "—"}{" "}
+                        <span className="text-gray-500">({Math.round((s.kans ?? 0) * 100)}%)</span>
+                      </div>
+                      {s.uitleg && <div className="text-xs text-gray-600 mt-1">{s.uitleg}</div>}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="text-sm text-gray-600">Geen suggesties terug van AI.</div>
+              )}
+              {Array.isArray(data.ai_keywords_used) && data.ai_keywords_used.length > 0 && (
+                <div className="text-xs text-gray-500">Keywords gebruikt voor DB: {data.ai_keywords_used.join(", ")}</div>
+              )}
+            </div>
+
+            <details className="border rounded-xl bg-white shadow-sm p-4 text-sm text-gray-700">
+              <summary className="font-semibold text-gray-900 cursor-pointer">📄 Ruwe tekst (OCR/parse)</summary>
+              <pre className="mt-3 p-3 bg-gray-100 rounded whitespace-pre-wrap max-h-64 overflow-auto">
+                {data.invoice_text || "—"}
+              </pre>
+            </details>
+          </section>
           {/* RAW TEXT */}
           <section>
             <h2 className="text-lg font-semibold mb-2">📄 Ruwe tekst (OCR/parse)</h2>

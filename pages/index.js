@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import OnboardingLanding from "../components/OnboardingLanding";
 import AppLayout from "../components/AppLayout";
 import CaptureInvoiceView from "../components/views/CaptureInvoiceView";
@@ -24,6 +24,8 @@ export default function Home() {
   const [profiles, setProfiles] = useState([]);
   const [profilesLoaded, setProfilesLoaded] = useState(false);
   const [profileError, setProfileError] = useState("");
+  const [showSetupFlow, setShowSetupFlow] = useState(false);
+  const [setupDismissed, setSetupDismissed] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState("");
   const [recentUploads, setRecentUploads] = useState(DEMO_UPLOADS);
   const [activeSection, setActiveSection] = useState(NAV_DEFAULT);
@@ -56,7 +58,9 @@ export default function Home() {
     try {
       const resp = await fetch("/api/profiles");
       if (resp.status === 401) {
-        setUser(null);
+        if (process.env.NODE_ENV === "production") {
+          setUser(null);
+        }
         setProfiles([]);
         return;
       }
@@ -81,6 +85,8 @@ export default function Home() {
     setProfilesLoaded(false);
     setSelectedAccount("");
     setProfileError("");
+    setShowSetupFlow(false);
+    setSetupDismissed(false);
     setRecentUploads(DEMO_UPLOADS);
     setInvoicesData([]);
     setInboxEntries([]);
@@ -120,6 +126,14 @@ export default function Home() {
     loadProfiles();
   }, [user, loadProfiles, resetAuthenticatedState]);
 
+  useEffect(() => {
+    if (!user || setupDismissed) return;
+    if (!profilesLoaded) return;
+    if (profiles.length === 0) {
+      setShowSetupFlow(true);
+    }
+  }, [user, profilesLoaded, profiles.length, setupDismissed]);
+
   const fetchInvoices = useCallback(async () => {
     try {
       const resp = await fetch("/api/invoices?limit=50");
@@ -132,7 +146,33 @@ export default function Home() {
           id: inv.id,
           filename: inv.sourceFilename || inv.invoiceNumber || "Invoice",
           status: inv.status === "Paid" ? "Ready" : inv.status,
-          action: inv.status === "Paid" ? "View" : "Review",
+          action:
+            inv.status === "Booked" || inv.status === "Paid"
+              ? "View"
+              : inv.status === "Pending Review"
+              ? "Review"
+              : "Review",
+          details:
+            Array.isArray(inv.bookingSummary) && inv.bookingSummary.length > 0
+              ? inv.bookingSummary
+                  .map((entry) => {
+                    const profileLabel = entry.profileName
+                      ? entry.profileName
+                      : entry.profile === "default"
+                      ? "Default"
+                      : `Profile ${entry.profile}`;
+                    const accountLabel = entry.account || "—";
+                    const amountValue = Number(entry.amount);
+                    const amountLabel = Number.isFinite(amountValue)
+                      ? new Intl.NumberFormat("en-US", {
+                          style: "currency",
+                          currency: inv.currency || "EUR",
+                        }).format(amountValue)
+                      : null;
+                    return `${profileLabel} -> ${accountLabel}${amountLabel ? ` (${amountLabel})` : ""}`;
+                  })
+                  .join("; ")
+              : "",
         }))
       );
     } catch (err) {
@@ -177,7 +217,7 @@ export default function Home() {
     const filename = fileMeta.filename || fileMeta.fileName || "Uploaded file";
     setRecentUploads((prev) => {
       const next = [
-        { id: `${Date.now()}`, filename, status: "Ready", action: "Review" },
+        { id: `${Date.now()}`, filename, status: "Pending Review", action: "Review" },
         ...prev,
       ];
       return next.slice(0, 5);
@@ -185,6 +225,62 @@ export default function Home() {
     fetchInvoices();
     fetchInbox();
   }, [fetchInvoices, fetchInbox]);
+
+  const queueCounts = useMemo(() => {
+    const counts = {
+      unreviewed: 0,
+      needsSplit: 0,
+      missingData: 0,
+    };
+
+    invoicesData.forEach((invoice) => {
+      const status = (invoice.status || "").toLowerCase();
+      if (status === "missing data") {
+        counts.missingData += 1;
+      } else if (status === "needs split") {
+        counts.needsSplit += 1;
+      } else if (status === "pending review") {
+        counts.unreviewed += 1;
+      }
+    });
+
+    if (!counts.unreviewed && !counts.needsSplit && !counts.missingData) {
+      return null;
+    }
+
+    return [
+      { label: "Unreviewed", count: counts.unreviewed },
+      { label: "Needs Split", count: counts.needsSplit },
+      { label: "Missing Data", count: counts.missingData },
+    ];
+  }, [invoicesData]);
+
+  const handleDeleteInvoices = useCallback(
+    async (invoiceIds = []) => {
+      if (!Array.isArray(invoiceIds) || invoiceIds.length === 0) return;
+
+      setRecentUploads((prev) => prev.filter((item) => !invoiceIds.includes(item.id)));
+
+      try {
+        const resp = await fetch("/api/invoices", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: invoiceIds }),
+        });
+
+        if (!resp.ok) {
+          const text = await resp.text();
+          throw new Error(text || "Failed to delete invoices");
+        }
+      } catch (err) {
+        console.error("[invoices] delete failed", err);
+      } finally {
+        fetchInvoices();
+        fetchInbox();
+      }
+    },
+    [fetchInvoices, fetchInbox]
+  );
 
   if (sessionLoading) {
     return (
@@ -203,12 +299,35 @@ export default function Home() {
     );
   }
 
+  const shouldShowSetup = showSetupFlow && !setupDismissed;
+
+  if (shouldShowSetup) {
+    const handleCompleteSetup = () => {
+      setSetupDismissed(true);
+      setShowSetupFlow(false);
+    };
+
+    return (
+      <OnboardingLanding
+        onAuthSuccess={handleAuthSuccess}
+        user={user}
+        profiles={profiles}
+        profilesLoaded={profilesLoaded}
+        profileError={profileError}
+        onProfilesChange={setProfiles}
+        onReloadProfiles={loadProfiles}
+        onCompleteSetup={handleCompleteSetup}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
   const renderSection = () => {
     switch (activeSection) {
       case "dashboard":
         return <DashboardOverviewView invoices={invoicesData} />;
       case "invoices":
-        return <InvoicesView invoices={invoicesData} />;
+        return <InvoicesView invoices={invoicesData} onDeleteSelected={handleDeleteInvoices} />;
       case "inbox":
         return (
           <InboxView
@@ -223,6 +342,7 @@ export default function Home() {
             entries={inboxEntries}
             selectedId={selectedBookingId}
             onSelectEntry={setSelectedBookingId}
+            latestAnalysis={analysis}
           />
         );
       case "lineItems":
@@ -230,7 +350,15 @@ export default function Home() {
       case "reports":
         return <ReportsView />;
       case "settings":
-        return <SettingsView />;
+        return (
+          <SettingsView
+            profiles={profiles}
+            profilesLoaded={profilesLoaded}
+            profileError={profileError}
+            onProfilesChange={setProfiles}
+            onReloadProfiles={loadProfiles}
+          />
+        );
       case "capture":
       default:
         return (
@@ -249,6 +377,7 @@ export default function Home() {
               inboxEntries.find((entry) => entry.id === (selectedBookingId || selectedInboxId)) ||
               inboxEntries[0]
             }
+            onGoToBookings={() => setActiveSection("bookings")}
           />
         );
     }
@@ -260,6 +389,7 @@ export default function Home() {
       activeSection={activeSection}
       onNavigate={setActiveSection}
       onLogout={handleLogout}
+      queueCounts={queueCounts}
     >
       {renderSection()}
     </AppLayout>

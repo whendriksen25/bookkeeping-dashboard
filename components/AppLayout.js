@@ -1,3 +1,4 @@
+import { useState } from "react";
 import styles from "./AppLayout.module.css";
 
 const NAV_ITEMS = [
@@ -11,25 +12,43 @@ const NAV_ITEMS = [
   { id: "settings", label: "Settings" },
 ];
 
-const QUEUES = [
-  { label: "Unreviewed", count: 12 },
-  { label: "Needs Split", count: 4 },
-  { label: "Missing Data", count: 2 },
-];
-
 export default function AppLayout({
   user,
   activeSection,
   onNavigate,
   onLogout,
   children,
+  queueCounts,
 }) {
+  const queues = Array.isArray(queueCounts) && queueCounts.length > 0 ? queueCounts : null;
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const handleNavigate = (sectionId) => {
+    onNavigate?.(sectionId);
+    setMobileMenuOpen(false);
+  };
+
+  const toggleMobileMenu = () => {
+    setMobileMenuOpen((prev) => !prev);
+  };
+
+  const sidebarClassName = [styles.sidebar];
+  if (mobileMenuOpen) sidebarClassName.push(styles.sidebarMobileOpen);
+
   return (
     <div className={styles.root}>
-      <aside className={styles.sidebar}>
+      <aside className={sidebarClassName.join(" ")}>
         <div className={styles.brand}>
-          <span>⌘</span>
-          ScanBooks
+          <img
+            src="/aiutofin-icon-for-black-bg.png"
+            alt="Aiutofin icon"
+            className={styles.brandIcon}
+          />
+          <img
+            src="/aiutofin-text-for-black-bg.png"
+            alt="Aiutofin"
+            className={styles.brandWordmark}
+          />
         </div>
         <nav className={styles.nav}>
           {NAV_ITEMS.map((item) => (
@@ -37,34 +56,41 @@ export default function AppLayout({
               key={item.id}
               type="button"
               className={`${styles.navButton} ${activeSection === item.id ? styles.navButtonActive : ""}`}
-              onClick={() => onNavigate?.(item.id)}
+              onClick={() => handleNavigate(item.id)}
             >
               {item.label}
             </button>
           ))}
         </nav>
-        <div className={styles.queueCard}>
-          {QUEUES.map((queue) => (
-            <div key={queue.label} className={styles.queueItem}>
-              <span>{queue.label}</span>
-              <strong>{queue.count}</strong>
-            </div>
-          ))}
-        </div>
-        <div className={styles.sidebarFooter}>© {new Date().getFullYear()} ScanBooks</div>
+        {queues && (
+          <div className={styles.queueCard}>
+            {queues.map((queue) => (
+              <div key={queue.label} className={styles.queueItem}>
+                <span>{queue.label}</span>
+                <strong>{queue.count}</strong>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className={styles.sidebarFooter}>© {new Date().getFullYear()} Aiutofin</div>
       </aside>
 
       <div className={styles.main}>
         <div className={styles.topbar}>
-          <div className={styles.searchGroup}>
-            <select className={styles.workspaceSelect} defaultValue="All Workspaces">
-              <option>All Workspaces</option>
-            </select>
-            <input
-              type="search"
-              className={styles.searchInput}
-              placeholder="Search invoices, vendors..."
-            />
+          <div className={styles.topbarLeft}>
+            <button type="button" className={styles.menuButton} onClick={toggleMobileMenu}>
+              Menu
+            </button>
+            <div className={styles.searchGroup}>
+              <select className={styles.workspaceSelect} defaultValue="All Workspaces">
+                <option>All Workspaces</option>
+              </select>
+              <input
+                type="search"
+                className={styles.searchInput}
+                placeholder="Search invoices, vendors..."
+              />
+            </div>
           </div>
           <div className={styles.userMenu}>
             <span>{user?.email}</span>
@@ -76,6 +102,8 @@ export default function AppLayout({
 
         <div className={styles.content}>{children}</div>
       </div>
+
+      {mobileMenuOpen && <div className={styles.mobileOverlay} onClick={toggleMobileMenu} />}
     </div>
   );
 }

@@ -9,7 +9,12 @@ export default async function handler(req, res) {
   }
 
   const session = await requireAuth(req, res);
-  if (!session) return;
+  if (!session) {
+    if (process.env.NODE_ENV !== "production") {
+      return res.status(200).json(dummyInvoice);
+    }
+    return;
+  }
 
   res.status(200).json(dummyInvoice);
 }

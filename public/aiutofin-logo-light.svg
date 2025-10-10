@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="80" viewBox="0 0 256 80" role="img">
+  <defs>
+    <linearGradient id="aiutofin-arrow-light" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#103984" />
+      <stop offset="55%" stop-color="#1C6FE2" />
+      <stop offset="100%" stop-color="#26BDFB" />
+    </linearGradient>
+  </defs>
+  <g fill="none" fill-rule="evenodd">
+    <path d="M53.83 10.22c19.56 0 35.43 15.86 35.43 35.42 0 6.22-1.62 11.9-4.34 16.66-4.68 8.3-13.93 12.8-23.54 12.8H32.7c-5.57 0-10.83 2.79-13.97 7.45-2.67 3.94-7.22 6.41-12 6.41-8.17 0-14.75-6.6-14.75-14.75 0-.77.06-1.53.16-2.28L-2.5 40.46C-.36 27.35 10.7 17.23 23.9 17.23h7.76" fill="#0F172A"/>
+    <path d="M41.95 13.6c13.7-13 31-20.55 51.9-22.1l2.2-.16c7.83-.3 14.15 5.94 13.86 13.77-.14 3.56-1.63 6.95-4.02 9.54l-21.8 22.06 18.6 3.6c6.28 1.21 10.98 6.64 11.1 13.02.2 7.83-5.87 14.29-13.7 14.29H41.48c-6.8 0-12.53-4.79-13.76-11.33-1.12-6 1.9-12.06 7.26-14.96l14.7-7.77-18.4-8.2c-11.53-5.17-13.71-20.37-4.22-28.6z" fill="url(#aiutofin-arrow-light)"/>
+    <g transform="translate(94 12)" fill="#1C6FE2">
+      <rect width="10" height="10" rx="2"/>
+      <rect width="10" height="10" rx="2" x="19" y="12" opacity=".8"/>
+      <rect width="10" height="10" rx="2" x="-3" y="17" opacity=".6"/>
+    </g>
+    <text fill="#0F172A" font-family="'Inter', 'Segoe UI', sans-serif" font-size="42" font-weight="600" letter-spacing="-.5">
+      <tspan x="130" y="57">Aiutofin</tspan>
+    </text>
+  </g>
+</svg>
