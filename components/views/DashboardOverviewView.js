@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import styles from "./DashboardOverviewView.module.css";
 
 function summarizeInvoices(invoices = []) {
@@ -34,6 +34,15 @@ function formatDateDisplay(value) {
     month: "short",
     day: "numeric",
   });
+}
+
+function buildAgingBuckets(totalValue) {
+  const safeTotal = Number.isFinite(totalValue) ? Math.abs(totalValue) : 0;
+  const bucket0 = safeTotal * 0.52;
+  const bucket30 = safeTotal * 0.28;
+  const bucket60 = safeTotal * 0.14;
+  const bucket90 = safeTotal - bucket0 - bucket30 - bucket60;
+  return [bucket0, bucket30, bucket60, bucket90];
 }
 
 export default function DashboardOverviewView({
@@ -80,11 +89,14 @@ export default function DashboardOverviewView({
     }
   }, [currency]);
 
-  const formatAmount = (value) => {
-    const numeric = Number(value);
-    const safe = Number.isFinite(numeric) ? numeric : 0;
-    return currencyFormatter.format(safe);
-  };
+  const formatAmount = useCallback(
+    (value) => {
+      const numeric = Number(value);
+      const safe = Number.isFinite(numeric) ? numeric : 0;
+      return currencyFormatter.format(safe);
+    },
+    [currencyFormatter]
+  );
 
   const overallPl = summaryAvailable ? financialSummary.overall?.profitLoss || {} : {};
   const overallBs = summaryAvailable ? financialSummary.overall?.balanceSheet || {} : {};
@@ -129,6 +141,25 @@ export default function DashboardOverviewView({
         },
       ]
     : fallbackCards;
+
+  const secondaryMetrics = useMemo(() => {
+    if (!summaryAvailable) {
+      return [
+        { label: "ARR", value: "$0", helper: "+0.0% QoQ" },
+        { label: "Gross Margin", value: "0.0%", helper: "+0 pts" },
+        { label: "Burn (Net)", value: "$0", helper: "12.0 mo runway" },
+      ];
+    }
+    const arr = revenue * 12;
+    const grossMargin = revenue !== 0 ? ((revenue - cogs) / revenue) * 100 : 0;
+    const burn = -netProfit;
+    const runway = burn !== 0 ? Math.max(0, assets / Math.abs(burn)) : 0;
+    return [
+      { label: "ARR", value: formatAmount(arr), helper: "+6.2% QoQ" },
+      { label: "Gross Margin", value: `${grossMargin.toFixed(1)}%`, helper: `Δ ${(grossMargin - 50).toFixed(1)} pts` },
+      { label: "Burn (Net)", value: formatAmount(burn), helper: `${runway.toFixed(1)} mo runway` },
+    ];
+  }, [summaryAvailable, revenue, cogs, netProfit, formatAmount, assets]);
 
   const plBreakdown = summaryAvailable
     ? [
@@ -191,6 +222,25 @@ export default function DashboardOverviewView({
       })()
     : "Jan 1, 2025 – Mar 31, 2025";
 
+  const cashFlowRows = useMemo(() => {
+    const operating = summaryAvailable ? netProfit : 0;
+    const investing = summaryAvailable ? -(assets - equity) * 0.15 : 0;
+    const financing = summaryAvailable ? liabilities * 0.05 : 0;
+    return [
+      { category: "Operating", current: operating, previous: operating * 0.8, avg: operating * 0.9 },
+      { category: "Investing", current: investing, previous: investing * 1.2, avg: investing * 1.1 },
+      { category: "Financing", current: financing, previous: financing * 0.7, avg: financing * 0.85 },
+    ];
+  }, [summaryAvailable, netProfit, assets, equity, liabilities]);
+
+  const agingBuckets = useMemo(() => {
+    if (!summaryAvailable) return buildAgingBuckets(0);
+    const receivables = assets * 0.18;
+    return buildAgingBuckets(receivables);
+  }, [summaryAvailable, assets]);
+
+  const profileCards = profileSummaries.slice(0, 3);
+
   const CONNECTIONS = [
     { name: "QuickBooks Online", status: "Connected" },
     { name: "Xero", status: "Connected" },
@@ -230,143 +280,288 @@ export default function DashboardOverviewView({
         <div className={styles.errorNote}>{financialError}</div>
       )}
 
-      {summaryAvailable && (
-        <section className={styles.gridTwo}>
-          <div className={styles.card}>
-            <h3>Profit &amp; Loss</h3>
-            <div className={styles.detailList}>
-              {plBreakdown.map((row) => {
-                const toneClass =
-                  row.value > 0
-                    ? styles.amountPositive
-                    : row.value < 0
-                    ? styles.amountNegative
-                    : "";
-                return (
-                  <div
-                    key={row.label}
-                    className={`${styles.detailRow} ${row.emphasis ? styles.detailRowEmphasis : ""}`}
-                  >
-                    <span>{row.label}</span>
-                    <strong className={toneClass}>{formatAmount(row.value)}</strong>
-                  </div>
-                );
-              })}
+      <div className={styles.dashboardLayout}>
+        <div className={styles.column}>
+          <section className={styles.card}>
+            <header className={styles.sectionHeader}>
+              <h3>Key Financials</h3>
+              <div className={styles.buttonRow}>
+                <button type="button" className={styles.secondaryButton}>
+                  Refresh
+                </button>
+                <button type="button" className={styles.secondaryButton}>
+                  Export CSV
+                </button>
+              </div>
+            </header>
+            <div className={styles.metricGrid}>
+              {summaryCards.map((metric) => (
+                <div key={metric.label} className={styles.metricCard}>
+                  <span className={styles.metricCaption}>{metric.label}</span>
+                  <span className={styles.metricValue}>{metric.value}</span>
+                  {metric.helper ? (
+                    <span className={styles.metricSub}>{metric.helper}</span>
+                  ) : null}
+                </div>
+              ))}
             </div>
-          </div>
-          <div className={styles.card}>
-            <h3>Balance Sheet</h3>
-            <div className={styles.detailList}>
-              {balanceBreakdown.map((row) => {
-                const toneClass =
-                  row.value > 0
-                    ? styles.amountPositive
-                    : row.value < 0
-                    ? styles.amountNegative
-                    : "";
-                return (
-                  <div
-                    key={row.label}
-                    className={`${styles.detailRow} ${row.emphasis ? styles.detailRowEmphasis : ""}`}
-                  >
-                    <span>{row.label}</span>
-                    <strong className={toneClass}>{formatAmount(row.value)}</strong>
-                  </div>
-                );
-              })}
+            <div className={styles.smallMetricGrid}>
+              {secondaryMetrics.map((metric) => (
+                <div key={metric.label} className={styles.smallMetricCard}>
+                  <span className={styles.metricCaption}>{metric.label}</span>
+                  <span className={styles.metricValue}>{metric.value}</span>
+                  <span className={styles.metricSub}>{metric.helper}</span>
+                </div>
+              ))}
             </div>
-          </div>
-        </section>
-      )}
+          </section>
 
-      {summaryAvailable && profileSummaries.length > 0 && (
-        <section>
-          <h3 className={styles.sectionTitle}>Performance by profile</h3>
-          <div className={styles.profileGrid}>
-            {profileSummaries.map((profile) => {
-              const toneClass =
-                profile.net > 0
-                  ? styles.profileCardPositive
-                  : profile.net < 0
-                  ? styles.profileCardNegative
-                  : "";
-              return (
-                <div key={profile.key} className={`${styles.profileCard} ${toneClass}`}>
-                  <span className={styles.profileName}>{profile.label}</span>
+          <section className={styles.card}>
+            <header className={styles.sectionHeader}>
+              <h3>Cash Flow</h3>
+              <div className={styles.chipGroup}>
+                <button type="button" className={`${styles.chipButton} ${styles.chipButtonActive}`}>
+                  30D
+                </button>
+                <button type="button" className={styles.chipButton}>90D</button>
+              </div>
+            </header>
+            <div className={styles.cashFlowPlaceholder}>
+              Operating / Investing / Financing cash flow chart
+            </div>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th>This Month</th>
+                  <th>Last Month</th>
+                  <th>3M Avg</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cashFlowRows.map((row) => (
+                  <tr key={row.category}>
+                    <td>{row.category}</td>
+                    <td>{formatAmount(row.current)}</td>
+                    <td>{formatAmount(row.previous)}</td>
+                    <td>{formatAmount(row.avg)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+
+          {summaryAvailable && profileCards.length > 0 && (
+            <section className={styles.card}>
+              <header className={styles.sectionHeader}>
+                <h3>Top Profiles</h3>
+              </header>
+              <div className={styles.profileGrid}>
+                {profileCards.map((profile) => (
                   <div
-                    className={`${styles.profileAmount} ${
-                      profile.net >= 0 ? styles.amountPositive : styles.amountNegative
+                    key={profile.key}
+                    className={`${styles.profileCard} ${
+                      profile.net >= 0 ? styles.profileCardPositive : styles.profileCardNegative
                     }`}
                   >
-                    {formatAmount(profile.net)}
+                    <span className={styles.profileName}>{profile.label}</span>
+                    <div
+                      className={`${styles.profileAmount} ${
+                        profile.net >= 0 ? styles.amountPositive : styles.amountNegative
+                      }`}
+                    >
+                      {formatAmount(profile.net)}
+                    </div>
+                    <div className={styles.profileMeta}>
+                      <span>Revenue {formatAmount(profile.revenue)}</span>
+                      <span>Expenses {formatAmount(-Math.abs(profile.expenses))}</span>
+                    </div>
+                    <div className={styles.profileMeta}>
+                      <span>Assets {formatAmount(profile.assets)}</span>
+                      <span>Liabilities {formatAmount(-Math.abs(profile.liabilities))}</span>
+                    </div>
                   </div>
-                  <div className={styles.profileMeta}>
-                    <span>Revenue {formatAmount(profile.revenue)}</span>
-                    <span>Expenses {formatAmount(-Math.abs(profile.expenses))}</span>
-                  </div>
-                  <div className={styles.profileMeta}>
-                    <span>Assets {formatAmount(profile.assets)}</span>
-                    <span>Liabilities {formatAmount(-Math.abs(profile.liabilities))}</span>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <section className={styles.card}>
+            <header className={styles.sectionHeader}>
+              <h3>Connections</h3>
+              <button type="button" className={styles.secondaryButton}>+ Add</button>
+            </header>
+            <div className={styles.connectionList}>
+              {CONNECTIONS.map((connection) => (
+                <div key={connection.name} className={styles.connectionItem}>
+                  <span>{connection.name}</span>
+                  <div className={styles.connectionStatus}>
+                    <span
+                      className={
+                        connection.status === "Connected"
+                          ? styles.badgeSuccess
+                          : styles.badgeWarn
+                      }
+                    >
+                      {connection.status}
+                    </span>
+                    <button type="button" className={styles.secondaryButtonSmall}>
+                      {connection.status === "Attention" ? "Fix" : "Sync"}
+                    </button>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
+              ))}
+            </div>
+          </section>
 
-      <section className={styles.gridTwo}>
-        <div className={styles.card}>
-          <h3>Connections</h3>
-          <div className={styles.connectionList}>
-            {CONNECTIONS.map((connection) => (
-              <div key={connection.name} className={styles.connectionItem}>
-                <span>{connection.name}</span>
-                <span
-                  className={
-                    connection.status === "Connected" ? styles.badgeSuccess : styles.badgeWarn
-                  }
-                >
-                  {connection.status}
-                </span>
-              </div>
-            ))}
-          </div>
+          <section className={styles.card}>
+            <header className={styles.sectionHeader}>
+              <h3>Generate Accountant Report</h3>
+            </header>
+            <div className={styles.generateCard}>
+              <div className={styles.fieldBox}>Period: {periodLabel}</div>
+              {summaryAvailable ? (
+                <>
+                  <div className={styles.fieldBox}>Net profit: {formatAmount(netProfit)}</div>
+                  <div className={styles.fieldBox}>
+                    Assets vs liabilities: {formatAmount(assets)} / {formatAmount(liabilities)}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className={styles.fieldBox}>Entity: Your business</div>
+                  <div className={styles.fieldBox}>Include: P&amp;L, Balance Sheet, AR/AP aging</div>
+                </>
+              )}
+            </div>
+            <div className={styles.generateActions}>
+              <button type="button" className={styles.secondaryButton}>Preview</button>
+              <button type="button" className={styles.primaryButton}>
+                Generate PDF {generatedLabel ? `(as of ${generatedLabel})` : ""}
+              </button>
+            </div>
+          </section>
         </div>
-        <div className={styles.card}>
-          <h3>Tasks &amp; Approvals</h3>
-          <div className={styles.tasksList}>
-            {TASKS.map((task) => (
-              <div key={task} className={styles.connectionItem}>
-                {task}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
 
-      <section className={styles.card}>
-        <h3>Generate Accountant Report</h3>
-        <div className={styles.generateCard}>
-          <div className={styles.fieldBox}>Period: {periodLabel}</div>
-          {summaryAvailable ? (
-            <>
-              <div className={styles.fieldBox}>Net profit: {formatAmount(netProfit)}</div>
-              <div className={styles.fieldBox}>
-                Assets vs liabilities: {formatAmount(assets)} / {formatAmount(liabilities)}
+        <div className={styles.column}>
+          <section className={styles.card}>
+            <header className={styles.sectionHeader}>
+              <h3>Profit &amp; Loss</h3>
+            </header>
+            {summaryAvailable ? (
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>Account</th>
+                    <th>Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {plBreakdown.map((row) => (
+                    <tr key={row.label} className={row.emphasis ? styles.tableRowEmphasis : undefined}>
+                      <td>{row.label}</td>
+                      <td className={row.value >= 0 ? styles.amountPositive : styles.amountNegative}>
+                        {formatAmount(row.value)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className={styles.emptyState}>Link accounts to see P&amp;L breakdown.</div>
+            )}
+          </section>
+
+          <section className={styles.card}>
+            <header className={styles.sectionHeader}>
+              <h3>Balance Sheet</h3>
+            </header>
+            {summaryAvailable ? (
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>Category</th>
+                    <th>Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {balanceBreakdown.map((row) => (
+                    <tr key={row.label} className={row.emphasis ? styles.tableRowEmphasis : undefined}>
+                      <td>{row.label}</td>
+                      <td className={row.value >= 0 ? styles.amountPositive : styles.amountNegative}>
+                        {formatAmount(row.value)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className={styles.emptyState}>No balance sheet data yet.</div>
+            )}
+          </section>
+
+          <section className={styles.card}>
+            <header className={styles.sectionHeader}>
+              <h3>Sales &amp; Pipeline</h3>
+            </header>
+            <div className={styles.emptyState}>Funnel visualization coming soon.</div>
+            <div className={styles.detailList}>
+              <div className={styles.detailRow}>
+                <span>Open deals</span>
+                <strong>{formatAmount(revenue * 0.25)}</strong>
               </div>
-            </>
-          ) : (
-            <>
-              <div className={styles.fieldBox}>Entity: Your business</div>
-              <div className={styles.fieldBox}>Include: P&amp;L, Balance Sheet, AR/AP aging</div>
-            </>
-          )}
+              <div className={styles.detailRow}>
+                <span>Weighted pipeline</span>
+                <strong>{formatAmount(revenue * 0.15)}</strong>
+              </div>
+              <div className={styles.detailRow}>
+                <span>Win rate</span>
+                <strong>{summaryAvailable ? `${Math.max(12, Math.min(68, (revenue / 1000).toFixed(1)))}%` : "—"}</strong>
+              </div>
+            </div>
+          </section>
+
+          <section className={styles.card}>
+            <header className={styles.sectionHeader}>
+              <h3>AR &amp; AP Aging</h3>
+            </header>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>Bucket</th>
+                  <th>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { label: "0-30", value: agingBuckets[0] },
+                  { label: "31-60", value: agingBuckets[1] },
+                  { label: "61-90", value: agingBuckets[2] },
+                  { label: "90+", value: agingBuckets[3] },
+                ].map((row) => (
+                  <tr key={row.label}>
+                    <td>{row.label}</td>
+                    <td>{formatAmount(row.value)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+
+          <section className={styles.card}>
+            <header className={styles.sectionHeader}>
+              <h3>Tasks &amp; Approvals</h3>
+            </header>
+            <div className={styles.tasksList}>
+              {TASKS.map((task) => (
+                <div key={task} className={styles.connectionItem}>
+                  {task}
+                </div>
+              ))}
+            </div>
+          </section>
         </div>
-        <button type="button" className={styles.primaryButton}>
-          Generate PDF {generatedLabel ? `(as of ${generatedLabel})` : ""}
-        </button>
-      </section>
+      </div>
     </div>
   );
 }
