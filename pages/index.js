@@ -33,6 +33,9 @@ export default function Home() {
   const [inboxEntries, setInboxEntries] = useState([]);
   const [selectedInboxId, setSelectedInboxId] = useState(null);
   const [selectedBookingId, setSelectedBookingId] = useState(null);
+  const [financialSummary, setFinancialSummary] = useState(null);
+  const [financialSummaryLoading, setFinancialSummaryLoading] = useState(false);
+  const [financialSummaryError, setFinancialSummaryError] = useState("");
 
   const loadSession = useCallback(async () => {
     setSessionLoading(true);
@@ -79,6 +82,30 @@ export default function Home() {
     }
   }, [setProfiles]);
 
+  const fetchFinancialSummary = useCallback(async () => {
+    if (!user) {
+      setFinancialSummary(null);
+      return;
+    }
+    setFinancialSummaryLoading(true);
+    setFinancialSummaryError("");
+    try {
+      const resp = await fetch("/api/reports/financial?includeProfiles=true");
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(text || "Failed to load financial summary");
+      }
+      const data = await resp.json();
+      setFinancialSummary(data.summary || null);
+    } catch (err) {
+      console.error("[reports] summary failed", err);
+      setFinancialSummary(null);
+      setFinancialSummaryError(err.message || "Could not load financial summary");
+    } finally {
+      setFinancialSummaryLoading(false);
+    }
+  }, [user]);
+
   const resetAuthenticatedState = useCallback(() => {
     setAnalysis(null);
     setProfiles([]);
@@ -93,6 +120,9 @@ export default function Home() {
     setSelectedInboxId(null);
     setSelectedBookingId(null);
     setActiveSection(NAV_DEFAULT);
+    setFinancialSummary(null);
+    setFinancialSummaryLoading(false);
+    setFinancialSummaryError("");
   }, []);
 
   const handleAuthSuccess = useCallback(
@@ -144,7 +174,7 @@ export default function Home() {
       setRecentUploads(
         invoices.slice(0, 5).map((inv) => ({
           id: inv.id,
-          filename: inv.sourceFilename || inv.invoiceNumber || "Invoice",
+          filename: inv.displayName || inv.sourceFilename || inv.invoiceNumber || "Invoice",
           status: inv.status === "Paid" ? "Ready" : inv.status,
           action:
             inv.status === "Booked" || inv.status === "Paid"
@@ -177,8 +207,10 @@ export default function Home() {
       );
     } catch (err) {
       console.error("[invoices] fetch failed", err);
+    } finally {
+      fetchFinancialSummary();
     }
-  }, []);
+  }, [fetchFinancialSummary]);
 
   const fetchInbox = useCallback(async () => {
     try {
@@ -200,7 +232,8 @@ export default function Home() {
     if (!user) return;
     fetchInvoices();
     fetchInbox();
-  }, [user, fetchInvoices, fetchInbox]);
+    fetchFinancialSummary();
+  }, [user, fetchInvoices, fetchInbox, fetchFinancialSummary]);
 
   useEffect(() => {
     if (!analysis) {
@@ -224,7 +257,8 @@ export default function Home() {
     });
     fetchInvoices();
     fetchInbox();
-  }, [fetchInvoices, fetchInbox]);
+    fetchFinancialSummary();
+  }, [fetchInvoices, fetchInbox, fetchFinancialSummary]);
 
   const queueCounts = useMemo(() => {
     const counts = {
@@ -255,6 +289,11 @@ export default function Home() {
     ];
   }, [invoicesData]);
 
+  const baseCurrency = useMemo(() => {
+    const withCurrency = invoicesData.find((inv) => inv.currency);
+    return withCurrency?.currency || "EUR";
+  }, [invoicesData]);
+
   const handleDeleteInvoices = useCallback(
     async (invoiceIds = []) => {
       if (!Array.isArray(invoiceIds) || invoiceIds.length === 0) return;
@@ -277,9 +316,10 @@ export default function Home() {
       } finally {
         fetchInvoices();
         fetchInbox();
+        fetchFinancialSummary();
       }
     },
-    [fetchInvoices, fetchInbox]
+    [fetchInvoices, fetchInbox, fetchFinancialSummary]
   );
 
   if (sessionLoading) {
@@ -325,7 +365,16 @@ export default function Home() {
   const renderSection = () => {
     switch (activeSection) {
       case "dashboard":
-        return <DashboardOverviewView invoices={invoicesData} />;
+        return (
+          <DashboardOverviewView
+            invoices={invoicesData}
+            financialSummary={financialSummary}
+            profiles={profiles}
+            currency={baseCurrency}
+            loadingFinancial={financialSummaryLoading}
+            financialError={financialSummaryError}
+          />
+        );
       case "invoices":
         return <InvoicesView invoices={invoicesData} onDeleteSelected={handleDeleteInvoices} />;
       case "inbox":

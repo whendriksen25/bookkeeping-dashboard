@@ -12,7 +12,11 @@ export default async function handler(req, res) {
 
   try {
     const limit = req.query.limit ? Number(req.query.limit) : 500;
-    const items = await listLineItemsForUser(session.userId, { limit });
+    const profileFilter =
+      typeof req.query.profile === "string" && req.query.profile.trim() !== ""
+        ? req.query.profile.trim()
+        : null;
+    const items = await listLineItemsForUser(session.userId, { limit, profile: profileFilter });
     res.status(200).json({ items });
   } catch (err) {
     console.error("[line-items] handler failed", err);

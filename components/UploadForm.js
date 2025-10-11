@@ -22,7 +22,7 @@ const prettyPrint = (value) => {
   if (value === null || value === undefined) return "—";
   try {
     return JSON.stringify(value, null, 2);
-  } catch (err) {
+  } catch {
     return String(value);
   }
 };
@@ -203,6 +203,13 @@ export default function UploadForm({
     cameraInputRef.current?.click();
   };
 
+  const handleDropzoneKeyDown = (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openFilePicker();
+    }
+  };
+
   const handleDragOver = (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -335,7 +342,6 @@ export default function UploadForm({
     { label: "POS terminal", value: invoiceDetails.kassa_terminal || "—" },
   ];
 
-  const recalculated = data?.herberekende_totalen || {};
   const sender = data?.factuurdetails?.afzender || {};
   const receiver = data?.factuurdetails?.ontvanger || {};
   const loyalty = data?.factuurdetails?.loyalty || {};
@@ -588,8 +594,12 @@ export default function UploadForm({
         />
 
         <div
+          role="button"
+          tabIndex={0}
+          aria-label="Upload invoice"
           className={`${styles.dropzone} ${dragActive ? styles.dropzoneActive : ""}`}
           onClick={openFilePicker}
+          onKeyDown={handleDropzoneKeyDown}
           onDragOver={handleDragOver}
           onDragEnter={handleDragOver}
           onDragLeave={handleDragLeave}

@@ -1,16 +1,8 @@
+/* eslint-disable @next/next/no-img-element */
 import UploadForm from "../UploadForm";
 import styles from "./CaptureInvoiceView.module.css";
-
-function formatCurrency(value, currency = "EUR") {
-  if (value === null || value === undefined || value === "") return "—";
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return String(value);
-  try {
-    return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(numeric);
-  } catch {
-    return `${numeric.toFixed(2)} ${currency}`;
-  }
-}
+import usePreviewAsset from "../hooks/usePreviewAsset.js";
+import formatInvoiceName from "../utils/formatInvoiceName.js";
 
 function buildPreviewData(analysis, fallbackInvoice) {
   const sourceUrl = analysis?.file?.url || fallbackInvoice?.sourceUrl || null;
@@ -29,6 +21,12 @@ function buildPreviewData(analysis, fallbackInvoice) {
     factuur?.factuurnummer || factuur?.referentie || fallbackInvoice?.invoiceNumber || "—";
   const invoiceDate = factuur?.factuurdatum || fallbackInvoice?.invoiceDate || "—";
   const status = factuur?.betaalstatus || fallbackInvoice?.status || "Pending";
+  const displayName = formatInvoiceName({
+    vendor,
+    invoiceDate,
+    invoiceNumber,
+    fallback: sourceFilename || sourceUrl || "Invoice",
+  });
 
   const rawLineItems = Array.isArray(factuur?.regels)
     ? factuur.regels
@@ -58,6 +56,7 @@ function buildPreviewData(analysis, fallbackInvoice) {
     tax,
     currency,
     lineItems,
+    displayName,
   };
 }
 
@@ -76,6 +75,20 @@ function getUploadStatusClass(status) {
 
 function PreviewPanel({ analysis, fallbackInvoice, selectedAccount, onGoToBookings }) {
   const preview = buildPreviewData(analysis, fallbackInvoice);
+  const previewAsset = usePreviewAsset(preview.sourceUrl);
+  const previewUrl = previewAsset.url;
+
+  const isImagePreview = (() => {
+    if (!previewUrl) return false;
+    if (previewAsset.mime) return previewAsset.mime.startsWith("image/");
+    return /\.(png|jpe?g|gif|bmp|webp|avif)$/i.test(preview.sourceUrl || "");
+  })();
+
+  const isPdfPreview = (() => {
+    if (!previewUrl) return false;
+    if (previewAsset.mime) return previewAsset.mime.includes("pdf");
+    return /\.pdf$/i.test(preview.sourceUrl || "");
+  })();
   const suggestions = Array.isArray(analysis?.ai_first_suggestions)
     ? analysis.ai_first_suggestions
     : [];
@@ -95,17 +108,23 @@ function PreviewPanel({ analysis, fallbackInvoice, selectedAccount, onGoToBookin
           </div>
         </div>
         <div className={styles.previewBox}>
-          {preview.sourceUrl ? (
-            preview.sourceUrl.match(/\.(png|jpe?g|gif|webp)$/i) ? (
+          {previewUrl ? (
+            isImagePreview ? (
               <img
-                src={preview.sourceUrl}
-                alt={preview.sourceFilename || "Invoice preview"}
+                src={previewUrl}
+                alt={preview.displayName || preview.sourceFilename || "Invoice preview"}
                 className={styles.previewImage}
+              />
+            ) : isPdfPreview ? (
+              <iframe
+                src={`${previewUrl}#view=FitH`}
+                title={preview.displayName || preview.sourceFilename || "Invoice preview"}
+                className={styles.previewFrame}
               />
             ) : (
               <iframe
-                src={preview.sourceUrl}
-                title={preview.sourceFilename || "Invoice preview"}
+                src={previewUrl}
+                title={preview.displayName || preview.sourceFilename || "Invoice preview"}
                 className={styles.previewFrame}
               />
             )

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import LineChart from "../LineChart";
 import styles from "./LineItemsView.module.css";
 
 function formatCurrency(value, currency = "EUR") {
@@ -24,6 +25,7 @@ const DEFAULT_FILTERS = {
   category: "all",
   subcategory: "all",
   vendor: "all",
+  profile: "all",
   startDate: "",
   endDate: "",
   minAmount: "",
@@ -81,6 +83,19 @@ export default function LineItemsView() {
     return Array.from(set).sort();
   }, [items]);
 
+  const profileOptions = useMemo(() => {
+    const map = new Map();
+    map.set("default", "Default");
+    items.forEach((item) => {
+      const id = item.profileId || "default";
+      const name = item.profileName || (id === "default" ? "Default" : `Profile ${id}`);
+      if (!map.has(id)) map.set(id, name);
+    });
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [items]);
+
   const subcategories = useMemo(() => {
     const set = new Set();
     items.forEach((item) => {
@@ -113,6 +128,7 @@ export default function LineItemsView() {
       const matchesCategory = filters.category === "all" || item.category === filters.category;
       const matchesSubcategory = filters.subcategory === "all" || item.subcategory === filters.subcategory;
       const matchesVendor = filters.vendor === "all" || item.vendorName === filters.vendor;
+      const matchesProfile = filters.profile === "all" || (item.profileId || "default") === filters.profile;
 
       const itemDate = normalizeDate(item.invoiceDate);
       const matchesStart = !start || (itemDate && itemDate >= start);
@@ -127,6 +143,7 @@ export default function LineItemsView() {
         matchesCategory &&
         matchesSubcategory &&
         matchesVendor &&
+        matchesProfile &&
         matchesStart &&
         matchesEnd &&
         matchesMin &&
@@ -178,6 +195,82 @@ export default function LineItemsView() {
     return Array.from(map.entries())
       .map(([name, total]) => ({ name, total }))
       .sort((a, b) => b.total - a.total);
+  }, [filteredItems]);
+
+  const totalsByProfile = useMemo(() => {
+    const map = new Map();
+    filteredItems.forEach((item) => {
+      const id = item.profileId || "default";
+      const name = item.profileName || (id === "default" ? "Default" : `Profile ${id}`);
+      let entry = map.get(id);
+      if (!entry) {
+        entry = {
+          id,
+          name,
+          total: 0,
+          bookingTotal: 0,
+          debitAccounts: new Set(),
+          creditAccounts: new Set(),
+          bookingInvoices: new Set(),
+        };
+        map.set(id, entry);
+      }
+
+      entry.total += Number(item.totalPrice) || 0;
+
+      const debitList = Array.isArray(item.bookingAccounts?.debit) ? item.bookingAccounts.debit : [];
+      debitList
+        .filter(Boolean)
+        .forEach((code) => entry.debitAccounts.add(code));
+
+      const creditList = Array.isArray(item.bookingAccounts?.credit) ? item.bookingAccounts.credit : [];
+      creditList
+        .filter(Boolean)
+        .forEach((code) => entry.creditAccounts.add(code));
+
+      if (item.bookingAmount != null) {
+        const invoiceKey = item.invoiceId || item.invoiceNumber;
+        const amount = Number(item.bookingAmount);
+        if (invoiceKey && Number.isFinite(amount) && !entry.bookingInvoices.has(invoiceKey)) {
+          entry.bookingInvoices.add(invoiceKey);
+          entry.bookingTotal += amount;
+        }
+      }
+    });
+
+    return Array.from(map.values())
+      .map((entry) => ({
+        id: entry.id,
+        name: entry.name,
+        total: entry.total,
+        bookingTotal: entry.bookingTotal,
+        debitAccounts: Array.from(entry.debitAccounts).sort(),
+        creditAccounts: Array.from(entry.creditAccounts).sort(),
+      }))
+      .sort((a, b) => b.total - a.total);
+  }, [filteredItems]);
+
+  const monthlySeries = useMemo(() => {
+    const map = new Map();
+    filteredItems.forEach((item) => {
+      const date = normalizeDate(item.invoiceDate);
+      if (!date) return;
+      const key = `${date.getFullYear()}-${date.getMonth()}`;
+      map.set(key, (map.get(key) || 0) + (Number(item.totalPrice) || 0));
+    });
+    const ordered = Array.from(map.entries())
+      .map(([key, spend]) => {
+        const [year, month] = key.split("-");
+        const date = new Date(Number(year), Number(month), 1);
+        return { date, spend };
+      })
+      .filter((entry) => Number.isFinite(entry.date.getTime()))
+      .sort((a, b) => a.date - b.date)
+      .slice(-12);
+    return ordered.map((entry) => ({
+      label: entry.date.toLocaleString(undefined, { month: "short" }),
+      spend: entry.spend,
+    }));
   }, [filteredItems]);
 
   const invoiceTotals = useMemo(() => {
@@ -319,6 +412,32 @@ export default function LineItemsView() {
     );
   };
 
+  const renderMonthlyChart = () => {
+    if (!monthlySeries.length) {
+      return (
+        <div className={styles.chartSectionEmpty}>
+          <span>No monthly spend data for the current selection yet.</span>
+        </div>
+      );
+    }
+    return (
+      <div className={styles.chartSection}>
+        <div className={styles.chartHeader}>
+          <div>
+            <h4>Monthly spend</h4>
+            <span className={styles.chartHelper}>Last 12 months</span>
+          </div>
+        </div>
+        <LineChart
+          data={monthlySeries}
+          series={[{ key: "spend", color: "#0ea5e9" }]}
+          height={220}
+          formatTooltip={(point) => `${point.label}: ${formatCurrency(point.spend, currency)}`}
+        />
+      </div>
+    );
+  };
+
   let tableContent;
   if (view === "category") {
     tableContent = renderGroupTable(totalsByCategory, [
@@ -336,8 +455,41 @@ export default function LineItemsView() {
       { key: "name", label: "Vendor" },
       { key: "total", label: "Total", align: "right", format: (v) => formatCurrency(v, currency) },
     ]);
+  } else if (view === "profile") {
+    tableContent = renderGroupTable(totalsByProfile, [
+      { key: "name", label: "Profile" },
+      {
+        key: "total",
+        label: "Line total",
+        align: "right",
+        format: (v) => formatCurrency(v, currency),
+      },
+      {
+        key: "bookingTotal",
+        label: "Booked total",
+        align: "right",
+        format: (v) => formatCurrency(v, currency),
+      },
+      {
+        key: "debitAccounts",
+        label: "Debit accounts",
+        format: (accounts = []) =>
+          Array.isArray(accounts) && accounts.length > 0 ? accounts.join(", ") : "—",
+      },
+      {
+        key: "creditAccounts",
+        label: "Credit accounts",
+        format: (accounts = []) =>
+          Array.isArray(accounts) && accounts.length > 0 ? accounts.join(", ") : "—",
+      },
+    ]);
   } else {
-    tableContent = renderTableView();
+    tableContent = (
+      <>
+        {renderTableView()}
+        {renderMonthlyChart()}
+      </>
+    );
   }
 
   return (
@@ -394,6 +546,21 @@ export default function LineItemsView() {
               {vendors.map((name) => (
                 <option key={name} value={name}>
                   {name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className={styles.filterLabel}>
+            Profile
+            <select
+              className={styles.filterSelect}
+              value={draftFilters.profile}
+              onChange={draftChange("profile")}
+            >
+              <option value="all">All profiles</option>
+              {profileOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name}
                 </option>
               ))}
             </select>
@@ -465,32 +632,42 @@ export default function LineItemsView() {
           ))}
         </section>
 
-        <section className={styles.tableCard}>
+        <section className={styles.overviewCard}>
           <div className={styles.tableHeader}>
             <h3>Overview</h3>
-            <div className={styles.tabBar}>
-              {[
-                { id: "items", label: "All items" },
-                { id: "category", label: "By category" },
-                { id: "subcategory", label: "By subcategory" },
-                { id: "vendor", label: "By vendor" },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  className={`${styles.tabButton} ${view === tab.id ? styles.tabButtonActive : ""}`}
-                  onClick={() => setView(tab.id)}
-                >
-                  {tab.label}
-                </button>
-              ))}
+            <div className={styles.tableHeaderActions}>
+              <button type="button" className={styles.exportButton}>
+                Export
+              </button>
+              <button type="button" className={styles.exportButton}>
+                Reports
+              </button>
             </div>
-            <button type="button" className={styles.exportButton}>
-              Export
-            </button>
           </div>
 
-          {tableContent}
+          <div className={styles.overviewBody}>
+            <div className={styles.tabbedCard}>
+              <div className={styles.tabBar}>
+                {[
+                  { id: "items", label: "All items" },
+                  { id: "category", label: "By category" },
+                  { id: "subcategory", label: "By subcategory" },
+                  { id: "vendor", label: "By vendor" },
+                  { id: "profile", label: "By profile" },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    className={`${styles.tabButton} ${view === tab.id ? styles.tabButtonActive : ""}`}
+                    onClick={() => setView(tab.id)}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+              {tableContent}
+            </div>
+          </div>
 
           <div className={styles.bottomTotals}>
             <div>
@@ -520,6 +697,22 @@ export default function LineItemsView() {
                   <span className={styles.summaryValue}>
                     {formatCurrency(entry.total, currency)}
                   </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className={styles.summaryCardAlt}>
+          <h3>By profile</h3>
+          {totalsByProfile.length === 0 ? (
+            <div className={styles.emptyState}>No profile totals for the current selection.</div>
+          ) : (
+            <div className={styles.summaryGrid}>
+              {totalsByProfile.map((entry) => (
+                <div key={entry.id} className={styles.summaryItem}>
+                  <span>{entry.name}</span>
+                  <span className={styles.summaryValue}>{formatCurrency(entry.total, currency)}</span>
                 </div>
               ))}
             </div>

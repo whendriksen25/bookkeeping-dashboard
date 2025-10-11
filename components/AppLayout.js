@@ -1,4 +1,6 @@
+/* eslint-disable @next/next/no-img-element */
 import { useState } from "react";
+
 import styles from "./AppLayout.module.css";
 
 const NAV_ITEMS = [
@@ -103,7 +105,14 @@ export default function AppLayout({
         <div className={styles.content}>{children}</div>
       </div>
 
-      {mobileMenuOpen && <div className={styles.mobileOverlay} onClick={toggleMobileMenu} />}
+      {mobileMenuOpen && (
+        <button
+          type="button"
+          aria-label="Close menu"
+          className={styles.mobileOverlay}
+          onClick={toggleMobileMenu}
+        />
+      )}
     </div>
   );
 }

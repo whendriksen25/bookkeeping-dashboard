@@ -1,6 +1,8 @@
 /* eslint-disable @next/next/no-img-element */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import styles from "./BookingsView.module.css";
+import usePreviewAsset from "../hooks/usePreviewAsset.js";
+import formatInvoiceName from "../utils/formatInvoiceName.js";
 
 function formatCurrency(value, currency = "EUR") {
   if (value === null || value === undefined || value === "") return "—";
@@ -47,6 +49,18 @@ function normalizeEntry(entry) {
     }
   }
 
+  const vendor = entry.vendor || factuur.afzender?.naam || "";
+  const invoiceNumber = entry.invoiceNumber || factuur.factuurnummer || entry.number || "";
+  const invoiceDate = entry.invoiceDate || factuur.factuurdatum || entry.date || "";
+  const sourceUrl = entry.sourceUrl || entry.file?.url || entry.url || null;
+  const sourceFilename = entry.sourceFilename || entry.file?.filename || entry.filename || null;
+  const displayName = formatInvoiceName({
+    vendor,
+    invoiceDate,
+    invoiceNumber,
+    fallback: sourceFilename || sourceUrl || "Invoice",
+  });
+
   return {
     id:
       entry.id ||
@@ -54,15 +68,16 @@ function normalizeEntry(entry) {
       entry.invoice_id ||
       entry.sourceFilename ||
       `entry-${Math.random().toString(36).slice(2, 8)}`,
-    vendor: entry.vendor || factuur.afzender?.naam || "—",
-    invoiceNumber: entry.invoiceNumber || factuur.factuurnummer || entry.number || "—",
-    invoiceDate: entry.invoiceDate || factuur.factuurdatum || entry.date || "—",
+    vendor: vendor || "—",
+    invoiceNumber: invoiceNumber || "—",
+    invoiceDate: invoiceDate || "—",
     status: entry.status || entry.bookingStatus || "Pending",
     currency: entry.currency || totals.valuta || "EUR",
     totalIncl:
       entry.totalIncl ?? totals.totaal_incl_btw ?? totals.totaal_incl ?? entry.total ?? entry.amount ?? null,
-    sourceUrl: entry.sourceUrl || entry.file?.url || entry.url || null,
-    sourceFilename: entry.sourceFilename || entry.file?.filename || entry.filename || null,
+    sourceUrl,
+    sourceFilename: sourceFilename || displayName,
+    displayName,
     ai_first_suggestions:
       entry.ai_first_suggestions || entry.aiFirstSuggestions || entry.aiSuggestions || [],
     ai_ranking: entry.ai_ranking || entry.aiRanking || null,
@@ -76,11 +91,12 @@ function normalizeEntry(entry) {
 
 function buildPreview(entry) {
   if (!entry) {
-    return { sourceUrl: null, sourceFilename: null, total: null, currency: "EUR" };
+    return { sourceUrl: null, sourceFilename: null, displayName: null, total: null, currency: "EUR" };
   }
   return {
     sourceUrl: entry.sourceUrl,
     sourceFilename: entry.sourceFilename,
+    displayName: entry.displayName,
     total: entry.totalIncl,
     currency: entry.currency || "EUR",
   };
@@ -194,6 +210,18 @@ export default function BookingsView({ entries = [], selectedId, onSelectEntry, 
 
   const selected = internalEntries.find((entry) => entry.id === localSelectedId) || null;
   const preview = buildPreview(selected);
+  const previewAsset = usePreviewAsset(preview?.sourceUrl || "");
+  const previewUrl = previewAsset.url;
+  const previewIsImage = useMemo(() => {
+    if (!previewUrl) return false;
+    if (previewAsset.mime) return previewAsset.mime.startsWith("image/");
+    return /\.(png|jpe?g|gif|bmp|webp|avif)$/i.test(preview?.sourceUrl || "");
+  }, [preview?.sourceUrl, previewAsset.mime, previewUrl]);
+  const previewIsPdf = useMemo(() => {
+    if (!previewUrl) return false;
+    if (previewAsset.mime) return previewAsset.mime.includes("pdf");
+    return /\.pdf$/i.test(preview?.sourceUrl || "");
+  }, [preview?.sourceUrl, previewAsset.mime, previewUrl]);
   const topCandidates = useMemo(() => getTopCandidates(selected), [selected]);
   const [chosenAccount, setChosenAccount] = useState(topCandidates[0]?.number || "");
 
@@ -329,7 +357,7 @@ export default function BookingsView({ entries = [], selectedId, onSelectEntry, 
               >
                 <div>
                   <strong>{entry.vendor}</strong>
-                  <div>{entry.invoiceNumber || entry.sourceFilename || "Invoice"}</div>
+                  <div>{entry.displayName || entry.invoiceNumber || entry.sourceFilename || "Invoice"}</div>
                   <div className={styles.entryMeta}>
                     {entry.invoiceDate || "—"} · {entry.status}
                   </div>
@@ -466,13 +494,13 @@ export default function BookingsView({ entries = [], selectedId, onSelectEntry, 
           <h3>Invoice preview</h3>
         </header>
         <div className={styles.previewBox}>
-          {preview.sourceUrl ? (
-            preview.sourceUrl.match(/\.(png|jpe?g|gif|webp)$/i) ? (
-              <img src={preview.sourceUrl} alt={preview.sourceFilename || "Invoice preview"} />
+          {previewUrl ? (
+            previewIsImage ? (
+              <img src={previewUrl} alt={preview.displayName || preview.sourceFilename || "Invoice preview"} />
             ) : (
               <iframe
-                src={preview.sourceUrl}
-                title={preview.sourceFilename || "Invoice preview"}
+                src={previewIsPdf ? `${previewUrl}#view=FitH` : previewUrl}
+                title={preview.displayName || preview.sourceFilename || "Invoice preview"}
               />
             )
           ) : (

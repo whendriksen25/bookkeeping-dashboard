@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import styles from "./InvoicesView.module.css";
 
 function getStatusClass(status) {
@@ -36,6 +36,8 @@ function formatAmount(value, currency) {
 export default function InvoicesView({ invoices = [], onDeleteSelected }) {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const [search, setSearch] = useState("");
+  const [profileFilter, setProfileFilter] = useState("all");
 
   useEffect(() => {
     setSelectedIds((prev) => {
@@ -115,14 +117,95 @@ export default function InvoicesView({ invoices = [], onDeleteSelected }) {
     handleRowToggle(invoiceId);
   };
 
+  const profiles = useMemo(() => {
+    const map = new Map();
+    invoices.forEach((invoice) => {
+      const summary = Array.isArray(invoice.bookingSummary) ? invoice.bookingSummary : [];
+      if (summary.length === 0) {
+        map.set("default", { id: "default", name: "Default" });
+      }
+      summary.forEach((entry) => {
+        const id = entry.profile || "default";
+        const name = entry.profileName
+          ? entry.profileName
+          : id === "default"
+          ? "Default"
+          : `Profile ${id}`;
+        if (!map.has(id)) {
+          map.set(id, { id, name });
+        }
+      });
+    });
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [invoices]);
+
+  const filteredInvoices = useMemo(() => {
+    const searchLower = search.trim().toLowerCase();
+    return invoices.filter((invoice) => {
+      const matchesSearch = searchLower
+        ? [invoice.vendor, invoice.invoiceNumber, invoice.status]
+            .filter(Boolean)
+            .some((value) => String(value).toLowerCase().includes(searchLower))
+        : true;
+
+      const matchesProfile = (() => {
+        if (profileFilter === "all") return true;
+        const summary = Array.isArray(invoice.bookingSummary) ? invoice.bookingSummary : [];
+        if (profileFilter === "default") {
+          return summary.length === 0 || summary.some((entry) => (entry.profile || "default") === "default");
+        }
+        return summary.some((entry) => String(entry.profile) === String(profileFilter));
+      })();
+
+      return matchesSearch && matchesProfile;
+    });
+  }, [invoices, search, profileFilter]);
+
+  const summaryStats = useMemo(() => {
+    const counts = {
+      total: filteredInvoices.length,
+      pending: 0,
+      booked: 0,
+      split: 0,
+      paid: 0,
+      totalAmount: 0,
+    };
+    filteredInvoices.forEach((invoice) => {
+      const status = (invoice.status || "").toLowerCase();
+      if (status === "pending review") counts.pending += 1;
+      if (status === "booked") counts.booked += 1;
+      if (status === "needs split") counts.split += 1;
+      if (status === "paid") counts.paid += 1;
+      const amount = Number(invoice.totalIncl);
+      if (Number.isFinite(amount)) counts.totalAmount += amount;
+    });
+    return counts;
+  }, [filteredInvoices]);
+
   return (
     <div className={styles.root}>
       <section className={styles.mainCard}>
         <div className={styles.filtersRow}>
-          <input className={styles.filterInput} placeholder="Search by vendor, number…" />
-          <input className={styles.filterInput} placeholder="Vendor: All" />
-          <input className={styles.filterInput} placeholder="Status: Any" />
-          <input className={styles.filterInput} placeholder="Date: This month" />
+          <input
+            className={styles.filterInput}
+            placeholder="Search by vendor, number…"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+          <select
+            className={styles.filterInput}
+            value={profileFilter}
+            onChange={(event) => setProfileFilter(event.target.value)}
+          >
+            <option value="all">All profiles</option>
+            {profiles.map((profile) => (
+              <option key={profile.id} value={profile.id}>
+                {profile.name}
+              </option>
+            ))}
+          </select>
+          <input className={styles.filterInput} placeholder="Status: Any" disabled />
+          <input className={styles.filterInput} placeholder="Date: This month" disabled />
         </div>
         <div className={styles.actionsRow}>
           <div className={styles.actionsLeft}>
@@ -174,7 +257,7 @@ export default function InvoicesView({ invoices = [], onDeleteSelected }) {
                   </th>
                 )}
                 <th>Vendor</th>
-                <th>Invoice #</th>
+                <th>Invoice</th>
                 <th>Date</th>
                 <th>Total</th>
                 <th>Status</th>
@@ -182,12 +265,12 @@ export default function InvoicesView({ invoices = [], onDeleteSelected }) {
               </tr>
             </thead>
             <tbody>
-              {invoices.length === 0 && (
+              {filteredInvoices.length === 0 && (
                 <tr>
                   <td colSpan={selectionMode ? 7 : 6}>No invoices yet.</td>
                 </tr>
               )}
-              {invoices.map((invoice) => (
+              {filteredInvoices.map((invoice) => (
                 <tr
                   key={invoice.id}
                   className={selectionMode && selectedIds.has(invoice.id) ? styles.selectedRow : undefined}
@@ -204,7 +287,7 @@ export default function InvoicesView({ invoices = [], onDeleteSelected }) {
                     </td>
                   )}
                   <td className={styles.vendorCell}>{invoice.vendor}</td>
-                  <td>{invoice.invoiceNumber}</td>
+                  <td>{invoice.displayName || invoice.invoiceNumber || "—"}</td>
                   <td>{invoice.invoiceDate || "—"}</td>
                   <td>
                     {invoice.totalIncl != null
@@ -286,11 +369,8 @@ export default function InvoicesView({ invoices = [], onDeleteSelected }) {
               <span>Anyone</span>
             </div>
             <div className={styles.filterRow}>
-              <button type="button" className={styles.secondaryButton}>
-                Clear
-              </button>
-              <button type="button" className={styles.applyButton}>
-                Apply
+              <button type="button" className={styles.secondaryButton} onClick={() => setProfileFilter("all")}>
+                Reset profile
               </button>
             </div>
           </div>
@@ -299,13 +379,14 @@ export default function InvoicesView({ invoices = [], onDeleteSelected }) {
         <div>
           <h3>Summary</h3>
           <div className={styles.summaryList}>
-            <div>Total invoices: {invoices.length}</div>
+            <div>Total invoices: {summaryStats.total}</div>
             <div>
-              Pending: {invoices.filter((inv) => inv.status === "Pending Review").length}
+              Pending: {summaryStats.pending}
             </div>
-            <div>Booked: {invoices.filter((inv) => inv.status === "Booked").length}</div>
-            <div>Needs Split: {invoices.filter((inv) => inv.status === "Needs Split").length}</div>
-            <div>Paid: {invoices.filter((inv) => inv.status === "Paid").length}</div>
+            <div>Booked: {summaryStats.booked}</div>
+            <div>Needs Split: {summaryStats.split}</div>
+            <div>Paid: {summaryStats.paid}</div>
+            <div>Total amount: {formatAmount(summaryStats.totalAmount, "EUR") || "—"}</div>
           </div>
         </div>
 
