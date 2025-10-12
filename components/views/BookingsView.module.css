@@ -234,6 +234,26 @@
   border: none;
 }
 
+.previewUnsupported {
+  text-align: center;
+  color: #64748b;
+  font-size: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+}
+
+.previewLink {
+  color: #0ea5e9;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.previewLink:hover {
+  text-decoration: underline;
+}
+
 .previewTotal {
   display: flex;
   justify-content: space-between;

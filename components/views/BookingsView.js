@@ -38,6 +38,9 @@ function normalizeEntry(entry) {
   const rawProfileSuggestion = entry.profile_suggestion || entry.profileSuggestion || null;
   let profileSuggestion = rawProfileSuggestion ? { ...rawProfileSuggestion } : null;
   if (profileSuggestion) {
+    if (profileSuggestion.profileId == null && profileSuggestion.profile_id != null) {
+      profileSuggestion.profileId = profileSuggestion.profile_id;
+    }
     if (!profileSuggestion.name) {
       const profileMatch = profiles.find(
         (profile) => String(profile.id) === String(profileSuggestion.profileId)
@@ -61,6 +64,68 @@ function normalizeEntry(entry) {
     fallback: sourceFilename || sourceUrl || "Invoice",
   });
 
+  const primaryProfileIdRaw =
+    entry.primaryProfileId ?? entry.primary_profile_id ?? entry.selectedProfileId ?? null;
+  const primaryProfileKey = primaryProfileIdRaw != null ? String(primaryProfileIdRaw) : null;
+  const primaryProfileName = (() => {
+    if (!primaryProfileKey) return null;
+    const profileMatch = profiles.find((p) => String(p.id) === primaryProfileKey);
+    if (profileMatch) return profileMatch.name;
+    return primaryProfileKey === "default" ? "Default" : `Profile ${primaryProfileKey}`;
+  })();
+
+  let selectedProfile = null;
+  if (primaryProfileKey) {
+    selectedProfile = { profileId: primaryProfileKey, name: primaryProfileName || null };
+  } else if (profileSuggestion?.profileId) {
+    selectedProfile = {
+      profileId: String(profileSuggestion.profileId),
+      name: profileSuggestion.name || null,
+    };
+  }
+
+  if (selectedProfile && selectedProfile.profileId) {
+    if (!profileSuggestion || typeof profileSuggestion !== "object") {
+      profileSuggestion = {};
+    }
+    profileSuggestion.profileId = selectedProfile.profileId;
+    if (selectedProfile.name) {
+      profileSuggestion.name = selectedProfile.name;
+    }
+  }
+
+  const rawBookingSummary =
+    entry.bookingSummary || entry.booking_summary || entry.booking_targets || [];
+  const bookingSummary = Array.isArray(rawBookingSummary)
+    ? rawBookingSummary
+        .filter(Boolean)
+        .map((item) => {
+          const rawProfile =
+            item.profile ?? item.profileId ?? item.profile_id ?? item.profile_reference;
+          const profileKey = rawProfile != null ? String(rawProfile) : "default";
+          const profileLabel = (() => {
+            if (item.profileName) return item.profileName;
+            const profileMatch = profiles.find((p) => String(p.id) === profileKey);
+            if (profileMatch) return profileMatch.name;
+            return profileKey === "default" ? "Default" : `Profile ${profileKey}`;
+          })();
+          return {
+            profile: profileKey,
+            profileName: profileLabel,
+            account: item.account || item.account_code || item.accountNumber || null,
+            amount:
+              item.amount ?? item.net ?? item.balance ?? item.total ?? item.value ?? null,
+          };
+        })
+    : [];
+
+  const bookedProfilesDisplay = bookingSummary.length
+    ? bookingSummary
+        .map((item) => item.profileName)
+        .filter(Boolean)
+        .join(", ")
+    : selectedProfile?.name || null;
+
   return {
     id:
       entry.id ||
@@ -78,6 +143,9 @@ function normalizeEntry(entry) {
     sourceUrl,
     sourceFilename: sourceFilename || displayName,
     displayName,
+    bookingSummary,
+    bookedProfilesDisplay,
+    selectedProfile,
     ai_first_suggestions:
       entry.ai_first_suggestions || entry.aiFirstSuggestions || entry.aiSuggestions || [],
     ai_ranking: entry.ai_ranking || entry.aiRanking || null,
@@ -142,6 +210,14 @@ function createEntryFromAnalysis(data) {
     ai_ranking: data.ai_ranking,
     db_candidates: data.db_candidates,
     profileSuggestion: data.profile_suggestion,
+    selectedProfileId:
+      data.selectedProfileId != null
+        ? String(data.selectedProfileId)
+        : data.profile_suggestion?.profileId != null
+        ? String(data.profile_suggestion.profileId)
+        : null,
+    selectedProfileName:
+      data.selectedProfileName || data.profile_suggestion?.name || null,
     profiles: data.profiles,
     lineItems: mapLineItems(data.factuurdetails?.regels, data.factuurdetails?.totaal?.valuta || "EUR"),
   };
@@ -213,10 +289,10 @@ export default function BookingsView({ entries = [], selectedId, onSelectEntry, 
   const previewAsset = usePreviewAsset(preview?.sourceUrl || "");
   const previewUrl = previewAsset.url;
   const previewIsImage = useMemo(() => {
-    if (!previewUrl) return false;
+    if (!previewUrl || previewAsset.unsupported) return false;
     if (previewAsset.mime) return previewAsset.mime.startsWith("image/");
-    return /\.(png|jpe?g|gif|bmp|webp|avif)$/i.test(preview?.sourceUrl || "");
-  }, [preview?.sourceUrl, previewAsset.mime, previewUrl]);
+    return /\.(png|jpe?g|gif|bmp|webp|avif|heic|heif)$/i.test(preview?.sourceUrl || "");
+  }, [preview?.sourceUrl, previewAsset.mime, previewAsset.unsupported, previewUrl]);
   const previewIsPdf = useMemo(() => {
     if (!previewUrl) return false;
     if (previewAsset.mime) return previewAsset.mime.includes("pdf");
@@ -267,12 +343,16 @@ export default function BookingsView({ entries = [], selectedId, onSelectEntry, 
       invoiceText: selected.invoice_text || selected.invoiceText || "",
       selectedAccount: chosenAccount,
       splitMode: false,
-      selectedProfileId: selected.profileSuggestion?.profileId
+      selectedProfileId: selected.selectedProfile?.profileId
+        ? String(selected.selectedProfile.profileId)
+        : selected.profileSuggestion?.profileId
         ? String(selected.profileSuggestion.profileId)
         : "default",
       lineItems: (selected.factuurdetails?.regels || []).map((item, index) => ({
         lineIndex: index,
-        profileId: selected.profileSuggestion?.profileId
+        profileId: selected.selectedProfile?.profileId
+          ? String(selected.selectedProfile.profileId)
+          : selected.profileSuggestion?.profileId
           ? String(selected.profileSuggestion.profileId)
           : "default",
         description:
@@ -346,24 +426,27 @@ export default function BookingsView({ entries = [], selectedId, onSelectEntry, 
             </button>
           </div>
           <div className={styles.entryList}>
-            {internalEntries.map((entry) => (
-              <button
-                key={entry.id}
-                type="button"
-                className={`${styles.entryButton} ${
-                  entry.id === localSelectedId ? styles.entryButtonActive : ""
-                }`}
-                onClick={() => handleSelect(entry.id)}
-              >
-                <div>
-                  <strong>{entry.vendor}</strong>
-                  <div>{entry.displayName || entry.invoiceNumber || entry.sourceFilename || "Invoice"}</div>
-                  <div className={styles.entryMeta}>
-                    {entry.invoiceDate || "—"} · {entry.status}
-                  </div>
+          {internalEntries.map((entry) => (
+            <button
+              key={entry.id}
+              type="button"
+              className={`${styles.entryButton} ${
+                entry.id === localSelectedId ? styles.entryButtonActive : ""
+              }`}
+              onClick={() => handleSelect(entry.id)}
+            >
+              <div>
+                <strong>{entry.vendor}</strong>
+                <div>{entry.displayName || entry.invoiceNumber || entry.sourceFilename || "Invoice"}</div>
+                <div className={styles.entryMeta}>
+                  {entry.invoiceDate || "—"} · {entry.status}
+                  {entry.bookedProfilesDisplay
+                    ? ` · ${entry.bookedProfilesDisplay}`
+                    : ""}
                 </div>
-                <div className={styles.entryMeta}>{entry.currency || "EUR"}</div>
-              </button>
+              </div>
+              <div className={styles.entryMeta}>{entry.currency || "EUR"}</div>
+            </button>
             ))}
             {internalEntries.length === 0 && <div>No items awaiting booking.</div>}
           </div>
@@ -372,9 +455,15 @@ export default function BookingsView({ entries = [], selectedId, onSelectEntry, 
         <section className={styles.suggestionCard}>
         <header className={styles.suggestionHeader}>
           <h2>AI booking suggestions</h2>
-          {selected?.profileSuggestion && (
+          {(selected?.selectedProfile || selected?.profileSuggestion) && (
             <span className={styles.profileBadge}>
-              Profile suggestion: {selected.profileSuggestion.name || selected.profileSuggestion.profileId}
+              Profile selected: {
+                selected.selectedProfile?.name ||
+                selected.selectedProfile?.profileId ||
+                selected.profileSuggestion?.name ||
+                selected.profileSuggestion?.profileId ||
+                "Default"
+              }
             </span>
           )}
         </header>
@@ -441,7 +530,13 @@ export default function BookingsView({ entries = [], selectedId, onSelectEntry, 
           <h2>Booking outcome preview</h2>
           {selected && chosenAccount && (
             <span className={styles.outcomeMeta}>
-              Profile: {selected.profileSuggestion?.name || selected.profileSuggestion?.profileId || "Default"}
+              Profile: {
+                selected.selectedProfile?.name ||
+                selected.selectedProfile?.profileId ||
+                selected.profileSuggestion?.name ||
+                selected.profileSuggestion?.profileId ||
+                "Default"
+              }
             </span>
           )}
         </header>
@@ -494,7 +589,21 @@ export default function BookingsView({ entries = [], selectedId, onSelectEntry, 
           <h3>Invoice preview</h3>
         </header>
         <div className={styles.previewBox}>
-          {previewUrl ? (
+          {previewAsset.unsupported ? (
+            <div className={styles.previewUnsupported}>
+              <span>Preview not available for this file type.</span>
+              {previewAsset.originalUrl ? (
+                <a
+                  href={previewAsset.originalUrl}
+                  className={styles.previewLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Download file
+                </a>
+              ) : null}
+            </div>
+          ) : previewUrl ? (
             previewIsImage ? (
               <img src={previewUrl} alt={preview.displayName || preview.sourceFilename || "Invoice preview"} />
             ) : (

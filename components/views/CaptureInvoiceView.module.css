@@ -268,6 +268,25 @@
   border: none;
 }
 
+.previewUnsupported {
+  text-align: center;
+  color: #64748b;
+  font-size: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+
+.previewLink {
+  color: #0ea5e9;
+  text-decoration: none;
+}
+
+.previewLink:hover {
+  text-decoration: underline;
+}
+
 .metaLabel {
   font-size: 0.7rem;
   text-transform: uppercase;

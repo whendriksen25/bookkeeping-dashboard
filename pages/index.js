@@ -236,6 +236,13 @@ export default function Home() {
   }, [user, fetchInvoices, fetchInbox, fetchFinancialSummary]);
 
   useEffect(() => {
+    if (!user) return;
+    if (activeSection === "dashboard") {
+      fetchInvoices();
+    }
+  }, [activeSection, user, fetchInvoices]);
+
+  useEffect(() => {
     if (!analysis) {
       setSelectedAccount("");
       return;

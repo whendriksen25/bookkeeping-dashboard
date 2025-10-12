@@ -79,9 +79,9 @@ function PreviewPanel({ analysis, fallbackInvoice, selectedAccount, onGoToBookin
   const previewUrl = previewAsset.url;
 
   const isImagePreview = (() => {
-    if (!previewUrl) return false;
+    if (!previewUrl || previewAsset.unsupported) return false;
     if (previewAsset.mime) return previewAsset.mime.startsWith("image/");
-    return /\.(png|jpe?g|gif|bmp|webp|avif)$/i.test(preview.sourceUrl || "");
+    return /\.(png|jpe?g|gif|bmp|webp|avif|heic|heif)$/i.test(preview.sourceUrl || "");
   })();
 
   const isPdfPreview = (() => {
@@ -108,7 +108,16 @@ function PreviewPanel({ analysis, fallbackInvoice, selectedAccount, onGoToBookin
           </div>
         </div>
         <div className={styles.previewBox}>
-          {previewUrl ? (
+          {previewAsset.unsupported ? (
+            <div className={styles.previewUnsupported}>
+              <p>Preview not available for this file type.</p>
+              {previewAsset.originalUrl ? (
+                <a href={previewAsset.originalUrl} className={styles.previewLink} target="_blank" rel="noopener noreferrer">
+                  Download file
+                </a>
+              ) : null}
+            </div>
+          ) : previewUrl ? (
             isImagePreview ? (
               <img
                 src={previewUrl}

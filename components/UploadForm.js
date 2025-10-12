@@ -1,5 +1,5 @@
 // components/UploadForm.js
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import styles from "./UploadForm.module.css";
 
 const formatCurrency = (value, currency = "EUR") => {
@@ -91,7 +91,20 @@ export default function UploadForm({
       ? { ...(data || {}), ...azData, file: fileMeta }
       : { ...(data || {}), ...azData };
 
-    setData(enrichedData);
+    const suggestedProfile = enrichedData?.profile_suggestion?.profileId
+      ? String(enrichedData.profile_suggestion.profileId)
+      : "";
+    const suggestedProfileMatch = Array.isArray(enrichedData?.profiles)
+      ? enrichedData.profiles.find((profile) => String(profile.id) === suggestedProfile)
+      : null;
+
+    const enrichedWithSelection = {
+      ...enrichedData,
+      selectedProfileId: suggestedProfile || null,
+      selectedProfileName: suggestedProfileMatch?.name || null,
+    };
+
+    setData(enrichedWithSelection);
     setBookingState("idle");
     setBookingMessage("");
 
@@ -103,9 +116,6 @@ export default function UploadForm({
       onProfilesChange(enrichedData.profiles);
     }
 
-    const suggestedProfile = enrichedData?.profile_suggestion?.profileId
-      ? String(enrichedData.profile_suggestion.profileId)
-      : "";
     setSelectedProfileId(suggestedProfile);
 
     const defaultAssignments = Array.isArray(enrichedData?.factuurdetails?.regels)
@@ -122,7 +132,7 @@ export default function UploadForm({
 
     if (typeof onAnalyze === "function") {
       try {
-        onAnalyze(enrichedData);
+        onAnalyze(enrichedWithSelection);
       } catch (callbackErr) {
         console.warn("onAnalyze callback threw", callbackErr);
       }
@@ -353,6 +363,44 @@ export default function UploadForm({
     ? profileSuggestion.ranked
     : [];
   const selectedProfile = profiles.find((p) => String(p.id) === selectedProfileId);
+
+  const handleProfileSelectionChange = useCallback(
+    (value) => {
+      const normalized = value ? String(value) : "";
+      setSelectedProfileId(normalized);
+      setData((prev) => {
+        if (!prev) return prev;
+
+        const profileMatch = profiles.find((profile) => String(profile.id) === normalized);
+        const normalizedId = normalized || null;
+        const normalizedName = profileMatch?.name || null;
+
+        if (
+          prev.selectedProfileId === normalizedId &&
+          prev.selectedProfileName === normalizedName
+        ) {
+          return prev;
+        }
+
+        const next = {
+          ...prev,
+          selectedProfileId: normalizedId,
+          selectedProfileName: normalizedName,
+        };
+
+        if (typeof onAnalyze === "function") {
+          try {
+            onAnalyze(next);
+          } catch (err) {
+            console.warn("onAnalyze callback threw", err);
+          }
+        }
+
+        return next;
+      });
+    },
+    [profiles, onAnalyze]
+  );
   const totalsCurrency = totals?.valuta || "EUR";
   const totalsInfo = [
     {
@@ -721,7 +769,7 @@ export default function UploadForm({
                     id="upload-profile-select"
                     className={styles.fieldControl}
                     value={selectedProfileId}
-                    onChange={(e) => setSelectedProfileId(e.target.value)}
+                    onChange={(e) => handleProfileSelectionChange(e.target.value)}
                   >
                     <option value="">— Select profile —</option>
                     {profiles.map((p) => (
