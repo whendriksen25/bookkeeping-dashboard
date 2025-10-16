@@ -52,6 +52,7 @@ export default function DashboardOverviewView({
   currency = "EUR",
   loadingFinancial = false,
   financialError = "",
+  onGenerateReport,
 }) {
   const fallbackCards = useMemo(() => {
     const summary = summarizeInvoices(invoices);
@@ -434,13 +435,22 @@ export default function DashboardOverviewView({
                 </>
               )}
             </div>
-            <div className={styles.generateActions}>
-              <button type="button" className={styles.secondaryButton}>Preview</button>
-              <button type="button" className={styles.primaryButton}>
-                Generate PDF {generatedLabel ? `(as of ${generatedLabel})` : ""}
-              </button>
-            </div>
-          </section>
+        <div className={styles.generateActions}>
+          <button type="button" className={styles.secondaryButton}>Preview</button>
+          <button
+            type="button"
+            className={styles.primaryButton}
+            onClick={() => onGenerateReport?.({
+              summary: financialSummary,
+              currency,
+              profiles,
+            })}
+            disabled={!summaryAvailable}
+          >
+            Generate PDF {generatedLabel ? `(as of ${generatedLabel})` : ""}
+          </button>
+        </div>
+      </section>
         </div>
 
         <div className={styles.column}>

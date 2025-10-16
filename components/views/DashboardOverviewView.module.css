@@ -282,6 +282,11 @@
   background: #0f766e;
 }
 
+.primaryButton:disabled {
+  background: #94a3b8;
+  cursor: not-allowed;
+}
+
 .generateCard {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));

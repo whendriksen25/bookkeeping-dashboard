@@ -106,6 +106,41 @@ export default function Home() {
     }
   }, [user]);
 
+  const handleGenerateReport = useCallback(
+    async ({ summary, currency }) => {
+      if (!user) return;
+      try {
+        const params = new URLSearchParams();
+        if (summary?.filters?.startDate) params.set("startDate", summary.filters.startDate);
+        if (summary?.filters?.endDate) params.set("endDate", summary.filters.endDate);
+        if (currency) params.set("currency", currency);
+
+        const resp = await fetch(`/api/reports/generate?${params.toString()}`);
+        if (!resp.ok) {
+          const text = await resp.text();
+          throw new Error(text || "Unable to generate report");
+        }
+        const buffer = await resp.arrayBuffer();
+        const blob = new Blob([buffer], { type: "application/pdf" });
+        const url = URL.createObjectURL(blob);
+        const win = window.open(url, "_blank");
+        if (!win) {
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = "financial-report.pdf";
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      } catch (err) {
+        console.error("[reports] generate UI failed", err);
+        alert(err.message || "Could not generate report");
+      }
+    },
+    [user]
+  );
+
   const resetAuthenticatedState = useCallback(() => {
     setAnalysis(null);
     setProfiles([]);
@@ -380,6 +415,7 @@ export default function Home() {
             currency={baseCurrency}
             loadingFinancial={financialSummaryLoading}
             financialError={financialSummaryError}
+            onGenerateReport={handleGenerateReport}
           />
         );
       case "invoices":

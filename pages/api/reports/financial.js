@@ -1,7 +1,7 @@
 import { getFinancialSummary } from "../../../lib/reports.js";
 import { requireAuth } from "../../../lib/auth.js";
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== "GET") {
     res.setHeader("Allow", "GET");
     return res.status(405).json({ error: "Method not allowed" });
@@ -24,3 +24,6 @@ export default async function handler(req, res) {
     res.status(500).json({ error: "Failed to build financial summary" });
   }
 }
+
+export default handler;
+export { handler as configHandler };
