@@ -49,20 +49,39 @@ export default function DashboardOverviewView({
   invoices = [],
   financialSummary = null,
   profiles = [],
+  selectedProfile = "all",
   currency = "EUR",
   loadingFinancial = false,
   financialError = "",
   onGenerateReport,
 }) {
+  const selectedProfileKey = selectedProfile && selectedProfile !== "all" ? selectedProfile : null;
+
+  const filteredInvoices = useMemo(() => {
+    if (!Array.isArray(invoices)) return [];
+    if (!selectedProfileKey) return invoices;
+    return invoices.filter((invoice) => {
+      if (!invoice) return false;
+      const primaryId = invoice.primaryProfileId != null ? String(invoice.primaryProfileId) : null;
+      if (primaryId && primaryId === selectedProfileKey) {
+        return true;
+      }
+      if (Array.isArray(invoice.bookingSummary)) {
+        return invoice.bookingSummary.some((entry) => String(entry.profile) === selectedProfileKey);
+      }
+      return false;
+    });
+  }, [invoices, selectedProfileKey]);
+
   const fallbackCards = useMemo(() => {
-    const summary = summarizeInvoices(invoices);
+    const summary = summarizeInvoices(filteredInvoices);
     return [
       { label: "Revenue", value: summary.revenue },
       { label: "Expenses", value: summary.expenses },
       { label: "Net Profit", value: summary.profit },
       { label: "Cash on Hand", value: summary.cash },
     ];
-  }, [invoices]);
+  }, [filteredInvoices]);
 
   const profileNameMap = useMemo(() => {
     const map = new Map();
@@ -70,11 +89,22 @@ export default function DashboardOverviewView({
       if (!profile || profile.id == null) return;
       map.set(String(profile.id), profile.name || `Profile ${profile.id}`);
     });
-    map.set("default", "Default");
+    map.set("default", "Default workspace");
     return map;
   }, [profiles]);
 
-  const summaryAvailable = Boolean(financialSummary?.overall);
+  const activeAggregate = useMemo(() => {
+    if (!financialSummary) return null;
+    if (selectedProfileKey) {
+      const match = Array.isArray(financialSummary.profiles)
+        ? financialSummary.profiles.find((entry) => String(entry.profile) === selectedProfileKey)
+        : null;
+      return match?.aggregate || null;
+    }
+    return financialSummary.overall || null;
+  }, [financialSummary, selectedProfileKey]);
+
+  const summaryAvailable = Boolean(activeAggregate);
 
   const currencyFormatter = useMemo(() => {
     try {
@@ -99,23 +129,43 @@ export default function DashboardOverviewView({
     [currencyFormatter]
   );
 
-  const overallPl = summaryAvailable ? financialSummary.overall?.profitLoss || {} : {};
-  const overallBs = summaryAvailable ? financialSummary.overall?.balanceSheet || {} : {};
+  const activeProfileLabel = useMemo(() => {
+    if (!selectedProfileKey) return "All workspaces";
+    if (selectedProfileKey === "default") return "Default workspace";
+    return profileNameMap.get(selectedProfileKey) || `Profile ${selectedProfileKey}`;
+  }, [profileNameMap, selectedProfileKey]);
 
-  const revenue = summaryAvailable ? (overallPl.revenue ?? 0) + (overallPl.otherIncome ?? 0) : 0;
-  const cogs = summaryAvailable ? overallPl.cogs ?? 0 : 0;
-  const opex = summaryAvailable ? overallPl.expenses ?? 0 : 0;
-  const otherIncome = summaryAvailable ? overallPl.otherIncome ?? 0 : 0;
-  const otherExpense = summaryAvailable ? overallPl.otherExpense ?? 0 : 0;
+  const generatedLabel = summaryAvailable && financialSummary?.generatedAt
+    ? formatDateDisplay(financialSummary.generatedAt)
+    : null;
+
+  const filters = financialSummary?.filters || {};
+  const periodLabel = summaryAvailable
+    ? (() => {
+        const startLabel = filters.startDate ? formatDateDisplay(filters.startDate) : null;
+        const endLabel = filters.endDate ? formatDateDisplay(filters.endDate) : null;
+        if (!startLabel && !endLabel) return "All activity";
+        return `${startLabel || "—"} → ${endLabel || "—"}`;
+      })()
+    : "Jan 1, 2025 – Mar 31, 2025";
+
+  const activePl = summaryAvailable ? activeAggregate.profitLoss || {} : {};
+  const activeBs = summaryAvailable ? activeAggregate.balanceSheet || {} : {};
+
+  const revenue = summaryAvailable ? (activePl.revenue ?? 0) + (activePl.otherIncome ?? 0) : 0;
+  const cogs = summaryAvailable ? activePl.cogs ?? 0 : 0;
+  const opex = summaryAvailable ? activePl.expenses ?? 0 : 0;
+  const otherIncome = summaryAvailable ? activePl.otherIncome ?? 0 : 0;
+  const otherExpense = summaryAvailable ? activePl.otherExpense ?? 0 : 0;
   const totalExpenses = summaryAvailable ? cogs + opex + otherExpense : 0;
   const netProfit = summaryAvailable
-    ? overallPl.net ?? revenue - totalExpenses
+    ? activePl.net ?? revenue - totalExpenses
     : 0;
 
-  const assets = summaryAvailable ? overallBs.assets ?? 0 : 0;
-  const liabilities = summaryAvailable ? overallBs.liabilities ?? 0 : 0;
-  const equity = summaryAvailable ? overallBs.equity ?? 0 : 0;
-  const balanceGap = summaryAvailable ? overallBs.net ?? assets - liabilities - equity : 0;
+  const assets = summaryAvailable ? activeBs.assets ?? 0 : 0;
+  const liabilities = summaryAvailable ? activeBs.liabilities ?? 0 : 0;
+  const equity = summaryAvailable ? activeBs.equity ?? 0 : 0;
+  const balanceGap = summaryAvailable ? activeBs.net ?? assets - liabilities - equity : 0;
 
   const summaryCards = summaryAvailable
     ? [
@@ -195,7 +245,8 @@ export default function DashboardOverviewView({
         const profileNet = pl.net ?? profileRevenue - profileExpenses;
         const profileAssets = bs.assets ?? 0;
         const profileLiabilities = bs.liabilities ?? 0;
-        const label = profileNameMap.get(key) || (key === "default" ? "Default" : `Profile ${key}`);
+        const label =
+          profileNameMap.get(key) || (key === "default" ? "Default workspace" : `Profile ${key}`);
         return {
           key,
           label,
@@ -208,20 +259,6 @@ export default function DashboardOverviewView({
       })
       .sort((a, b) => b.net - a.net);
   }, [financialSummary?.profiles, profileNameMap, summaryAvailable]);
-
-  const generatedLabel = summaryAvailable && financialSummary.generatedAt
-    ? formatDateDisplay(financialSummary.generatedAt)
-    : null;
-
-  const filters = financialSummary?.filters || {};
-  const periodLabel = summaryAvailable
-    ? (() => {
-        const startLabel = filters.startDate ? formatDateDisplay(filters.startDate) : null;
-        const endLabel = filters.endDate ? formatDateDisplay(filters.endDate) : null;
-        if (!startLabel && !endLabel) return "All activity";
-        return `${startLabel || "—"} → ${endLabel || "—"}`;
-      })()
-    : "Jan 1, 2025 – Mar 31, 2025";
 
   const cashFlowRows = useMemo(() => {
     const operating = summaryAvailable ? netProfit : 0;
@@ -240,7 +277,9 @@ export default function DashboardOverviewView({
     return buildAgingBuckets(receivables);
   }, [summaryAvailable, assets]);
 
-  const profileCards = profileSummaries.slice(0, 3);
+  const profileCards = selectedProfileKey
+    ? profileSummaries.filter((profile) => profile.key === selectedProfileKey)
+    : profileSummaries.slice(0, 3);
 
   const CONNECTIONS = [
     { name: "QuickBooks Online", status: "Connected" },
@@ -256,6 +295,16 @@ export default function DashboardOverviewView({
 
   return (
     <div className={styles.root}>
+      <div className={styles.contextNote}>
+        <span>
+          Showing metrics for <strong>{activeProfileLabel}</strong>
+        </span>
+        {generatedLabel ? <span>Updated {generatedLabel}</span> : null}
+        {!summaryAvailable && selectedProfileKey ? (
+          <span>No financial postings yet for this profile.</span>
+        ) : null}
+      </div>
+
       <section className={styles.summaryGrid}>
         {summaryCards.map((item) => {
           const toneClass =

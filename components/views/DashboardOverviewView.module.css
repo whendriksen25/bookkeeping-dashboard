@@ -3,6 +3,19 @@
   gap: 24px;
 }
 
+.contextNote {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  font-size: 0.85rem;
+  color: #475569;
+}
+
+.contextNote strong {
+  color: #0f172a;
+}
+
 .summaryGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

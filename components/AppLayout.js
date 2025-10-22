@@ -21,6 +21,9 @@ export default function AppLayout({
   onLogout,
   children,
   queueCounts,
+  profiles = [],
+  selectedProfile = "all",
+  onProfileChange,
 }) {
   const queues = Array.isArray(queueCounts) && queueCounts.length > 0 ? queueCounts : null;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -84,8 +87,29 @@ export default function AppLayout({
               Menu
             </button>
             <div className={styles.searchGroup}>
-              <select className={styles.workspaceSelect} defaultValue="All Workspaces">
-                <option>All Workspaces</option>
+              <select
+                className={styles.workspaceSelect}
+                value={selectedProfile}
+                onChange={(event) => onProfileChange?.(event.target.value)}
+              >
+                <option value="all">All workspaces</option>
+                <option value="default">Default workspace</option>
+                {profiles.map((profile) => {
+                  const value = profile?.id != null ? String(profile.id) : "";
+                  const label = profile?.name
+                    ? profile.name
+                    : value
+                    ? `Profile ${value}`
+                    : "Unnamed profile";
+                  const typeLabel = profile?.type
+                    ? ` (${profile.type.charAt(0).toUpperCase()}${profile.type.slice(1)})`
+                    : "";
+                  return (
+                    <option key={value || label} value={value}>
+                      {`${label}${typeLabel}`}
+                    </option>
+                  );
+                })}
               </select>
               <input
                 type="search"

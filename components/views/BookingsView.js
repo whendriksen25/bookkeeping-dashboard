@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import styles from "./BookingsView.module.css";
 import usePreviewAsset from "../hooks/usePreviewAsset.js";
 import formatInvoiceName from "../utils/formatInvoiceName.js";
+import UploadJourney from "../UploadJourney.js";
 
 function formatCurrency(value, currency = "EUR") {
   if (value === null || value === undefined || value === "") return "—";
@@ -234,6 +235,11 @@ export default function BookingsView({ entries = [], selectedId, onSelectEntry, 
   const [bookingMessage, setBookingMessage] = useState("");
 
   useEffect(() => {
+    setBookingStatus("idle");
+    setBookingMessage("");
+  }, [localSelectedId]);
+
+  useEffect(() => {
     const normalized = entries.map(normalizeEntry).filter(Boolean);
     setInternalEntries(normalized);
     if (normalized.length === 0) {
@@ -331,6 +337,114 @@ export default function BookingsView({ entries = [], selectedId, onSelectEntry, 
     });
     return Array.from(map.entries()).map(([account, total]) => ({ account, total }));
   }, [bookingOutcome]);
+
+  const journeySteps = useMemo(() => {
+    const hasSelectedInvoice = Boolean(selected);
+    const topCandidate = topCandidates[0] || null;
+    const hasAiRanking = Boolean(selected?.ai_ranking) || Boolean(selected?.ai_first_suggestions);
+    const localMatchesCount = Array.isArray(selected?.db_candidates)
+      ? selected.db_candidates.length
+      : 0;
+    const hasLocalMatches = localMatchesCount > 0;
+    const hasChosen = Boolean(chosenAccount);
+    const hasPreview = bookingOutcome.length > 0;
+    const bookedAlready = Array.isArray(selected?.bookingSummary) && selected.bookingSummary.length > 0;
+    const bookingSuccess = bookingStatus === "success" || bookedAlready;
+    const bookingLoading = bookingStatus === "loading";
+    const bookingError = bookingStatus === "error";
+
+    const aiStatus = !hasSelectedInvoice
+      ? "pending"
+      : hasAiRanking || topCandidate
+      ? "done"
+      : "current";
+
+    const aiMeta = hasAiRanking && topCandidate
+      ? `${topCandidate.number} · ${topCandidate.description}`
+      : null;
+
+    const localStatus = !hasSelectedInvoice
+      ? "pending"
+      : hasLocalMatches
+      ? "done"
+      : hasAiRanking || topCandidate
+      ? "current"
+      : "pending";
+
+    const localMeta = hasLocalMatches
+      ? `${localMatchesCount} chart match${localMatchesCount === 1 ? "" : "es"}`
+      : null;
+
+    const reviewStatus = !hasSelectedInvoice
+      ? "pending"
+      : hasPreview || hasChosen
+      ? "done"
+      : hasLocalMatches || hasAiRanking || topCandidate
+      ? "current"
+      : "pending";
+
+    const profileLabel = selected?.selectedProfile?.name || selected?.selectedProfile?.profileId || null;
+    const reviewMeta = hasPreview || hasChosen
+      ? `${chosenAccount}${profileLabel ? " · " + profileLabel : ""}`
+      : null;
+
+    let bookStatus = "pending";
+    if (!hasSelectedInvoice) {
+      bookStatus = "pending";
+    } else if (bookingSuccess) {
+      bookStatus = "done";
+    } else if (bookingError) {
+      bookStatus = "error";
+    } else if (bookingLoading || hasChosen) {
+      bookStatus = "current";
+    }
+
+    const bookMeta = bookingSuccess
+      ? bookingMessage || "Posted to ledger"
+      : bookingError
+      ? bookingMessage
+      : null;
+
+    return [
+      {
+        key: "ai",
+        title: "AI account suggestion",
+        description: "Our model inspects the invoice and proposes likely ledger codes.",
+        status: aiStatus,
+        meta: aiMeta,
+      },
+      {
+        key: "lookup",
+        title: "Chart lookup",
+        description: "We match those suggestions against your saved chart of accounts.",
+        status: localStatus,
+        meta: localMeta,
+      },
+      {
+        key: "review",
+        title: "Review & confirm",
+        description: "Pick the right account and profile before posting the entry.",
+        status: reviewStatus,
+        meta: reviewMeta,
+      },
+      {
+        key: "book",
+        title: "Post booking",
+        description: "Create the journal and sync it back to your bookkeeping workspace.",
+        status: bookStatus,
+        meta: bookMeta,
+      },
+    ];
+  }, [
+    selected,
+    selected?.bookingSummary,
+    selected?.selectedProfile,
+    topCandidates,
+    chosenAccount,
+    bookingOutcome,
+    bookingStatus,
+    bookingMessage,
+  ]);
 
   const handleBookNow = useCallback(async () => {
     if (!selected || !chosenAccount) return;
@@ -451,6 +565,12 @@ export default function BookingsView({ entries = [], selectedId, onSelectEntry, 
             {internalEntries.length === 0 && <div>No items awaiting booking.</div>}
           </div>
         </section>
+
+        <UploadJourney
+          title="Booking pipeline"
+          subtitle="Follow how AI picks accounts, matches your chart, and posts the journal."
+          steps={journeySteps}
+        />
 
         <section className={styles.suggestionCard}>
         <header className={styles.suggestionHeader}>

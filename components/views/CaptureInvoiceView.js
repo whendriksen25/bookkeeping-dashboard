@@ -1,8 +1,10 @@
 /* eslint-disable @next/next/no-img-element */
+import { useMemo, useState } from "react";
 import UploadForm from "../UploadForm";
 import styles from "./CaptureInvoiceView.module.css";
 import usePreviewAsset from "../hooks/usePreviewAsset.js";
 import formatInvoiceName from "../utils/formatInvoiceName.js";
+import UploadJourney from "../UploadJourney.js";
 
 function buildPreviewData(analysis, fallbackInvoice) {
   const sourceUrl = analysis?.file?.url || fallbackInvoice?.sourceUrl || null;
@@ -73,7 +75,13 @@ function getUploadStatusClass(status) {
   }
 }
 
-function PreviewPanel({ analysis, fallbackInvoice, selectedAccount, onGoToBookings }) {
+function PreviewPanel({
+  analysis,
+  fallbackInvoice,
+  selectedAccount,
+  onGoToBookings,
+  journeySteps,
+}) {
   const preview = buildPreviewData(analysis, fallbackInvoice);
   const previewAsset = usePreviewAsset(preview.sourceUrl);
   const previewUrl = previewAsset.url;
@@ -143,6 +151,12 @@ function PreviewPanel({ analysis, fallbackInvoice, selectedAccount, onGoToBookin
         </div>
       </section>
 
+      <UploadJourney
+        title="Processing status"
+        subtitle="Watch this invoice move from upload to booking."
+        steps={journeySteps}
+      />
+
       <section className={styles.previewCard}>
         <div className={styles.previewHeader}>
           <h3>AI COA suggestions</h3>
@@ -203,6 +217,37 @@ export default function CaptureInvoiceView({
   fallbackInvoice,
   onGoToBookings,
 }) {
+  const defaultJourney = useMemo(
+    () => [
+      {
+        key: "upload",
+        title: "Upload received",
+        description: "We store the original document securely and prepare it for extraction.",
+        status: "pending",
+      },
+      {
+        key: "analyze",
+        title: "AI extraction",
+        description: "Key fields like totals, VAT, and vendor details are captured automatically.",
+        status: "pending",
+      },
+      {
+        key: "review",
+        title: "Review & enrich",
+        description: "Confirm the suggested profile and chart-of-accounts assignment.",
+        status: "pending",
+      },
+      {
+        key: "book",
+        title: "Book to ledger",
+        description: "Create the journal entry and sync it to your bookkeeping workspace.",
+        status: "pending",
+      },
+    ],
+    []
+  );
+  const [journeySteps, setJourneySteps] = useState(defaultJourney);
+
   return (
     <div className={styles.page}>
       <header className={styles.header}>
@@ -225,16 +270,18 @@ export default function CaptureInvoiceView({
               onAnalyze={onAnalyze}
               profiles={profiles}
               profilesLoaded={profilesLoaded}
-              onProfilesChange={onProfilesChange}
-              selectedAccount={selectedAccount}
-              onSelectAccount={onSelectAccount}
-              onUploadComplete={onUploadComplete}
-              analysis={analysis}
-              fallbackInvoice={fallbackInvoice}
-              profileError={profileError}
-            />
-            {profileError && <p className={styles.inlineError}>{profileError}</p>}
-          </section>
+            onProfilesChange={onProfilesChange}
+            selectedAccount={selectedAccount}
+            onSelectAccount={onSelectAccount}
+            onUploadComplete={onUploadComplete}
+            analysis={analysis}
+            onJourneyUpdate={setJourneySteps}
+            onGoToBookings={onGoToBookings}
+            fallbackInvoice={fallbackInvoice}
+            profileError={profileError}
+          />
+          {profileError && <p className={styles.inlineError}>{profileError}</p>}
+        </section>
 
           <section className={styles.secondaryCard}>
             <div className={styles.sectionHeader}>
@@ -287,6 +334,7 @@ export default function CaptureInvoiceView({
             fallbackInvoice={fallbackInvoice}
             selectedAccount={selectedAccount}
             onGoToBookings={onGoToBookings}
+            journeySteps={journeySteps}
           />
         </aside>
       </div>

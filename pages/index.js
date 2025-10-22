@@ -27,6 +27,7 @@ export default function Home() {
   const [showSetupFlow, setShowSetupFlow] = useState(false);
   const [setupDismissed, setSetupDismissed] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState("");
+  const [selectedProfileId, setSelectedProfileId] = useState("all");
   const [recentUploads, setRecentUploads] = useState(DEMO_UPLOADS);
   const [activeSection, setActiveSection] = useState(NAV_DEFAULT);
   const [invoicesData, setInvoicesData] = useState([]);
@@ -146,6 +147,7 @@ export default function Home() {
     setProfiles([]);
     setProfilesLoaded(false);
     setSelectedAccount("");
+    setSelectedProfileId("all");
     setProfileError("");
     setShowSetupFlow(false);
     setSetupDismissed(false);
@@ -190,6 +192,15 @@ export default function Home() {
     }
     loadProfiles();
   }, [user, loadProfiles, resetAuthenticatedState]);
+
+  useEffect(() => {
+    if (selectedProfileId === "all") return;
+    if (selectedProfileId === "default") return;
+    const exists = profiles.some((profile) => String(profile.id) === selectedProfileId);
+    if (!exists) {
+      setSelectedProfileId("all");
+    }
+  }, [profiles, selectedProfileId]);
 
   useEffect(() => {
     if (!user || setupDismissed) return;
@@ -412,6 +423,7 @@ export default function Home() {
             invoices={invoicesData}
             financialSummary={financialSummary}
             profiles={profiles}
+            selectedProfile={selectedProfileId}
             currency={baseCurrency}
             loadingFinancial={financialSummaryLoading}
             financialError={financialSummaryError}
@@ -482,6 +494,9 @@ export default function Home() {
       onNavigate={setActiveSection}
       onLogout={handleLogout}
       queueCounts={queueCounts}
+      profiles={profiles}
+      selectedProfile={selectedProfileId}
+      onProfileChange={setSelectedProfileId}
     >
       {renderSection()}
     </AppLayout>

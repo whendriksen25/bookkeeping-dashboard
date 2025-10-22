@@ -1,6 +1,12 @@
 // components/UploadForm.js
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import styles from "./UploadForm.module.css";
+const createJourneyTimes = () => ({
+  startedAt: null,
+  uploadCompletedAt: null,
+  analyzeStartedAt: null,
+  analysisCompletedAt: null,
+});
 
 const formatCurrency = (value, currency = "EUR") => {
   if (value === null || value === undefined || value === "") return "—";
@@ -50,6 +56,8 @@ export default function UploadForm({
   onSelectAccount,
   onUploadComplete,
   analysis,
+  onJourneyUpdate,
+  onGoToBookings,
 }) {
   const [file, setFile] = useState(null);
   const [uploadedFileMeta, setUploadedFileMeta] = useState(null);
@@ -63,6 +71,8 @@ export default function UploadForm({
   const [dragActive, setDragActive] = useState(false);
   const [emailCopied, setEmailCopied] = useState(false);
   const demoLoadedRef = useRef(false);
+  const [journeyStarted, setJourneyStarted] = useState(false);
+  const [journeyTimes, setJourneyTimes] = useState(() => createJourneyTimes());
 
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
@@ -84,8 +94,9 @@ export default function UploadForm({
     return best;
   }, [data]);
 
-  const applyAnalysisResult = (azData, fileMeta = null) => {
+  const applyAnalysisResult = (azData, fileMeta = null, options = {}) => {
     if (!azData) return;
+    const { markJourney = true } = options;
 
     const enrichedData = fileMeta
       ? { ...(data || {}), ...azData, file: fileMeta }
@@ -107,6 +118,18 @@ export default function UploadForm({
     setData(enrichedWithSelection);
     setBookingState("idle");
     setBookingMessage("");
+    if (markJourney) {
+      setJourneyStarted(true);
+      setJourneyTimes((prev) => {
+        const now = Date.now();
+        return {
+          startedAt: prev.startedAt ?? now,
+          uploadCompletedAt: prev.uploadCompletedAt ?? now,
+          analyzeStartedAt: prev.analyzeStartedAt ?? now,
+          analysisCompletedAt: now,
+        };
+      });
+    }
 
     if (fileMeta) {
       setUploadedFileMeta(fileMeta);
@@ -147,8 +170,18 @@ export default function UploadForm({
     }
   };
 
-  async function handleLoadDummy() {
+  async function handleLoadDummy({ markJourney = true } = {}) {
     try {
+      if (markJourney) {
+        const startedAt = Date.now();
+        setJourneyStarted(true);
+        setJourneyTimes({
+          startedAt,
+          uploadCompletedAt: null,
+          analyzeStartedAt: null,
+          analysisCompletedAt: null,
+        });
+      }
       setLoading(true);
       const resp = await fetch("/api/analyze-dummy");
       if (!resp.ok) {
@@ -162,7 +195,16 @@ export default function UploadForm({
         url: null,
       };
       setFile(null);
-      applyAnalysisResult(dummyData, dummyFileMeta);
+      if (markJourney) {
+        const now = Date.now();
+        setJourneyTimes((prev) => ({
+          startedAt: prev.startedAt ?? now,
+          uploadCompletedAt: prev.uploadCompletedAt ?? now,
+          analyzeStartedAt: prev.analyzeStartedAt ?? now,
+          analysisCompletedAt: prev.analysisCompletedAt,
+        }));
+      }
+      applyAnalysisResult(dummyData, dummyFileMeta, { markJourney });
     } catch (err) {
       console.error("[dummy] failed", err);
     } finally {
@@ -175,7 +217,7 @@ export default function UploadForm({
     if (demoLoadedRef.current) return;
     if (data || analysis) return;
     demoLoadedRef.current = true;
-    handleLoadDummy();
+    handleLoadDummy({ markJourney: false });
   }, [data, analysis]);
 
   useEffect(() => {
@@ -188,8 +230,12 @@ export default function UploadForm({
   const handleFileSelection = (selectedFile) => {
     if (selectedFile) {
       setFile(selectedFile);
+      setJourneyStarted(false);
+      setJourneyTimes(createJourneyTimes());
     } else {
       setFile(null);
+      setJourneyStarted(false);
+      setJourneyTimes(createJourneyTimes());
     }
   };
 
@@ -271,6 +317,14 @@ export default function UploadForm({
   async function handleSubmit(e) {
     e.preventDefault();
     if (!file) return;
+    const startedAt = Date.now();
+    setJourneyStarted(true);
+    setJourneyTimes({
+      startedAt,
+      uploadCompletedAt: null,
+      analyzeStartedAt: null,
+      analysisCompletedAt: null,
+    });
     setLoading(true);
 
     try {
@@ -283,6 +337,15 @@ export default function UploadForm({
         return;
       }
       const upData = await up.json();
+      setJourneyTimes((prev) => {
+        const now = Date.now();
+        return {
+          startedAt: prev.startedAt ?? now,
+          uploadCompletedAt: prev.uploadCompletedAt ?? now,
+          analyzeStartedAt: now,
+          analysisCompletedAt: prev.analysisCompletedAt,
+        };
+      });
 
       const az = await fetch("/api/analyze", {
         method: "POST",
@@ -363,6 +426,153 @@ export default function UploadForm({
     ? profileSuggestion.ranked
     : [];
   const selectedProfile = profiles.find((p) => String(p.id) === selectedProfileId);
+
+  const bookingSummaryCount = Array.isArray(data?.bookingSummary) ? data.bookingSummary.length : 0;
+  const hasUploadedRaw = Boolean(uploadedFileMeta || data?.file);
+  const uploadFileName =
+    uploadedFileMeta?.filename || data?.file?.filename || (file ? file.name : "");
+  const uploadCompleted = Boolean(journeyTimes.uploadCompletedAt);
+  const analyzeStarted = Boolean(journeyTimes.analyzeStartedAt);
+  const analysisCompleted = Boolean(journeyTimes.analysisCompletedAt);
+  const uploadInProgress = journeyStarted && !uploadCompleted && (loading || Boolean(file));
+  const analyzeInProgress = journeyStarted && analyzeStarted && !analysisCompleted;
+  const hasAnalysisRaw = Boolean(data);
+  const hasAnalysis = journeyStarted && (analysisCompleted || hasAnalysisRaw);
+  const bookingSuccess = bookingState === "success" || bookingSummaryCount > 0;
+  const bookingInFlight = bookingState === "processing";
+  const bookingFailed = bookingState === "error";
+  const suggestedAccountNumber =
+    data?.ai_ranking?.keuze_nummer || data?.db_candidates?.[0]?.number || null;
+
+  const analysisPrepSeconds = useMemo(() => {
+    if (!journeyTimes.startedAt || !journeyTimes.analysisCompletedAt) return null;
+    const diff = (journeyTimes.analysisCompletedAt - journeyTimes.startedAt) / 1000;
+    if (!Number.isFinite(diff) || diff < 0) return null;
+    return diff;
+  }, [journeyTimes.startedAt, journeyTimes.analysisCompletedAt]);
+
+  const journeySteps = useMemo(() => {
+    const steps = [];
+
+    let uploadStatus = "pending";
+    if (!journeyStarted) {
+      uploadStatus = "pending";
+    } else if (uploadCompleted) {
+      uploadStatus = "done";
+    } else if (uploadInProgress) {
+      uploadStatus = "current";
+    } else if (journeyStarted) {
+      uploadStatus = "current";
+    }
+
+    steps.push({
+      key: "upload",
+      title: "Upload received",
+      description: "We store the original document securely and prepare it for extraction.",
+      status: uploadStatus,
+      meta: uploadFileName || null,
+    });
+
+    let analyzeStatus = "pending";
+    if (!journeyStarted) {
+      analyzeStatus = "pending";
+    } else if (analysisCompleted) {
+      analyzeStatus = "done";
+    } else if (analyzeInProgress) {
+      analyzeStatus = "current";
+    } else if (uploadCompleted) {
+      analyzeStatus = "current";
+    }
+
+    steps.push({
+      key: "analyze",
+      title: "AI extraction",
+      description: "Key fields like totals, VAT, and vendor details are captured automatically.",
+      status: analyzeStatus,
+    });
+
+    let reviewStatus = "pending";
+    if (!journeyStarted) {
+      reviewStatus = "pending";
+    } else if (bookingSuccess) {
+      reviewStatus = "done";
+    } else if (analysisCompleted) {
+      reviewStatus = "current";
+    }
+
+    const reviewMetaParts = [];
+    if (reviewStatus !== "pending") {
+      if (selectedAccount) {
+        reviewMetaParts.push(
+          `COA ${selectedAccount}${selectedProfile ? ` · ${selectedProfile.name}` : ""}`
+        );
+      } else if (suggestedAccountNumber) {
+        reviewMetaParts.push(`AI suggests ${suggestedAccountNumber}`);
+      }
+      if (analysisPrepSeconds != null) {
+        reviewMetaParts.push(`${analysisPrepSeconds.toFixed(1)}s prep`);
+      }
+    }
+    const reviewMeta = reviewMetaParts.length ? reviewMetaParts.join(" · ") : null;
+
+    steps.push({
+      key: "review",
+      title: "Review & enrich",
+      description: "Confirm the suggested profile and chart-of-accounts assignment.",
+      status: reviewStatus,
+      meta: reviewMeta,
+    });
+
+    let bookStatus = "pending";
+    if (!journeyStarted) {
+      bookStatus = "pending";
+    } else if (bookingSuccess) {
+      bookStatus = "done";
+    } else if (bookingFailed) {
+      bookStatus = "error";
+    } else if (bookingInFlight) {
+      bookStatus = "current";
+    } else if (hasAnalysis) {
+      bookStatus = "pending";
+    }
+
+    steps.push({
+      key: "book",
+      title: "Book to ledger",
+      description: "Create the journal entry and sync it to your bookkeeping workspace.",
+      status: bookStatus,
+      meta:
+        bookingMessage && (bookingSuccess || bookingFailed)
+          ? bookingMessage
+          : bookingSuccess
+          ? "Ready to review in bookings."
+          : null,
+    });
+
+    return steps;
+  }, [
+    journeyStarted,
+    uploadCompleted,
+    uploadInProgress,
+    analyzeInProgress,
+    file,
+    uploadFileName,
+    analysisCompleted,
+    bookingSuccess,
+    bookingFailed,
+    bookingInFlight,
+    selectedAccount,
+    selectedProfile,
+    suggestedAccountNumber,
+    bookingMessage,
+    analysisPrepSeconds,
+  ]);
+
+  useEffect(() => {
+    if (typeof onJourneyUpdate === "function") {
+      onJourneyUpdate(journeySteps);
+    }
+  }, [journeySteps, onJourneyUpdate]);
 
   const handleProfileSelectionChange = useCallback(
     (value) => {
@@ -761,6 +971,11 @@ export default function UploadForm({
               </p>
             ) : (
               <div className="space-y-3">
+                {data && !selectedProfileId && (
+                  <div className={styles.profileNotice}>
+                    Please select one of your profiles and click on <strong>Bookkeeping suggestion</strong> next.
+                  </div>
+                )}
                 <div>
                   <label className={styles.fieldLabel} htmlFor="upload-profile-select">
                     Company / Profile
@@ -816,6 +1031,19 @@ export default function UploadForm({
                         </li>
                       ))}
                     </ul>
+                  </div>
+                )}
+
+                {typeof onGoToBookings === "function" && (
+                  <div className={styles.primaryCtaRow}>
+                    <button
+                      type="button"
+                      className={styles.primaryCtaButton}
+                      onClick={() => onGoToBookings?.()}
+                      disabled={!data}
+                    >
+                      Bookkeeping suggestion
+                    </button>
                   </div>
                 )}
               </div>

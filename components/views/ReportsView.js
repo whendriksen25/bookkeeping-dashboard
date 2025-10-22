@@ -118,11 +118,16 @@ export default function ReportsView() {
     }
   }, [summary]);
 
+  const buildParamsFromFilters = useCallback(() => {
+    const params = new URLSearchParams();
+    if (summary?.filters?.startDate) params.set("startDate", summary.filters.startDate);
+    if (summary?.filters?.endDate) params.set("endDate", summary.filters.endDate);
+    return params;
+  }, [summary]);
+
   const handleDownloadCashflowReport = useCallback(async () => {
     try {
-      const params = new URLSearchParams();
-      if (summary?.filters?.startDate) params.set("startDate", summary.filters.startDate);
-      if (summary?.filters?.endDate) params.set("endDate", summary.filters.endDate);
+      const params = buildParamsFromFilters();
       const resp = await fetch(`/api/reports/cashflow?${params.toString()}`);
       if (!resp.ok) {
         const text = await resp.text();
@@ -145,7 +150,53 @@ export default function ReportsView() {
       console.error("[reports] cashflow report", err);
       alert(err.message || "Could not generate liquidity forecast report");
     }
-  }, [summary]);
+  }, [buildParamsFromFilters]);
+
+  const handleDownloadPnL = useCallback(async () => {
+    try {
+      const params = buildParamsFromFilters();
+      const resp = await fetch(`/api/reports/pnl?${params.toString()}`);
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(text || "Unable to generate profit & loss report");
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `profit-and-loss-${Date.now()}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err) {
+      console.error("[reports] pnl report", err);
+      alert(err.message || "Could not generate profit & loss report");
+    }
+  }, [buildParamsFromFilters]);
+
+  const handleDownloadBalanceSheet = useCallback(async () => {
+    try {
+      const params = buildParamsFromFilters();
+      const resp = await fetch(`/api/reports/balance-sheet?${params.toString()}`);
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(text || "Unable to generate balance sheet report");
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `balance-sheet-${Date.now()}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err) {
+      console.error("[reports] balance sheet report", err);
+      alert(err.message || "Could not generate balance sheet report");
+    }
+  }, [buildParamsFromFilters]);
 
   return (
     <div className={styles.root}>
@@ -178,6 +229,38 @@ export default function ReportsView() {
           <div className={styles.statusNote}>No profiles available yet. Upload and book invoices to generate insights.</div>
         )}
         <div className={styles.reportList}>
+          <div className={styles.reportItem}>
+            <div>
+              <strong>Profit &amp; Loss Statement</strong>
+              <div className={styles.reportDescription}>
+                Export revenue, COGS, operating expenses, and net profit for the selected period.
+              </div>
+            </div>
+            <button
+              type="button"
+              className={styles.reportButton}
+              onClick={handleDownloadPnL}
+              disabled={!summary}
+            >
+              Create
+            </button>
+          </div>
+          <div className={styles.reportItem}>
+            <div>
+              <strong>Balance Sheet</strong>
+              <div className={styles.reportDescription}>
+                Snapshot of assets, liabilities, and equity to share with stakeholders.
+              </div>
+            </div>
+            <button
+              type="button"
+              className={styles.reportButton}
+              onClick={handleDownloadBalanceSheet}
+              disabled={!summary}
+            >
+              Create
+            </button>
+          </div>
           <div className={styles.reportItem}>
             <div>
               <strong>Liquidity Forecast</strong>

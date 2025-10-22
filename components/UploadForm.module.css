@@ -389,6 +389,46 @@
   gap: 4px;
 }
 
+.profileNotice {
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  background: rgba(191, 219, 254, 0.45);
+  color: #1d4ed8;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.primaryCtaRow {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.primaryCtaButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #0f172a;
+  color: #ffffff;
+  border: none;
+  border-radius: 999px;
+  padding: 10px 20px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.primaryCtaButton:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.18);
+}
+
+.primaryCtaButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .rankList li {
   list-style: disc;
 }
