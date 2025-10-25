@@ -7,6 +7,8 @@ import { Pool } from "pg";
 import crypto from "crypto";
 import { listProfiles } from "../../lib/profiles.js";
 import { requireAuth } from "../../lib/auth.js";
+import { findVendorWithDetails } from "../../lib/vendors.js";
+import { findCustomerWithDetails } from "../../lib/customers.js";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -297,6 +299,64 @@ function normalizeStructuredOutput(structured) {
   }
 
   return cloned;
+}
+
+function normalizeString(value) {
+  if (value == null) return null;
+  const trimmed = String(value).trim();
+  return trimmed || null;
+}
+
+function buildContactDiff(extracted, record) {
+  if (!record?.vendor && !record?.customer) {
+    return {
+      status: "new",
+      changes: null,
+      record: null,
+    };
+  }
+
+  const entity = record.vendor || record.customer;
+  const type = record.vendor ? "vendor" : "customer";
+
+  const extractedAddress = extracted?.adres_volledig || extracted?.adres || null;
+  const storedLocations = record.locations || [];
+  const primaryLocation = storedLocations.find((loc) => loc.is_primary) || storedLocations[0] || null;
+
+  const diffs = [];
+
+  const compareField = (label, extractedValue, storedValue) => {
+    const normalizedExtracted = normalizeString(extractedValue);
+    const normalizedStored = normalizeString(storedValue);
+    if (!normalizedExtracted && !normalizedStored) return;
+    if (normalizedExtracted !== normalizedStored) {
+      diffs.push({ label, extracted: normalizedExtracted, stored: normalizedStored });
+    }
+  };
+
+  compareField("name", extracted?.naam, entity.display_name || entity.trade_name || entity.legal_name);
+  compareField("kvk_number", extracted?.kvk_nummer, entity.kvk_number);
+  compareField("vat_number", extracted?.btw_nummer, entity.vat_number);
+  compareField("email", extracted?.email, entity.email);
+  compareField("phone", extracted?.telefoon, entity.phone);
+  compareField("iban", extracted?.iban || extracted?.bankrekening, entity.iban || entity.billing_iban);
+  compareField("address", extractedAddress, primaryLocation?.full_address);
+
+  const status = diffs.length === 0 ? "match" : "mismatch";
+
+  return {
+    status,
+    type,
+    record: {
+      id: entity.id,
+      displayName: entity.display_name,
+      vatNumber: entity.vat_number,
+      kvkNumber: entity.kvk_number,
+      locations: storedLocations,
+      taxIds: record.taxIds,
+    },
+    diffs,
+  };
 }
 
 async function convertHeicViaCloudinary(sourceUrl) {
@@ -713,6 +773,12 @@ export default async function handler(req, res) {
     const candidates = await fetchCoaLeafCandidates(keywords);
     const aiRanking = await rankDbCandidatesWithAI(normalizedStructured, candidates);
 
+    const vendorRecord = await findVendorWithDetails({ userId: session.userId, factuurdetails: normalizedStructured?.factuurdetails });
+    const customerRecord = await findCustomerWithDetails({ userId: session.userId, factuurdetails: normalizedStructured?.factuurdetails });
+
+    const vendorDiff = vendorRecord ? buildContactDiff(normalizedStructured?.factuurdetails?.afzender, vendorRecord) : null;
+    const customerDiff = customerRecord ? buildContactDiff(normalizedStructured?.factuurdetails?.ontvanger, customerRecord) : null;
+
     res.status(200).json({
       invoice_text: structured?.ruwe_tekst || rawText || "",
       factuurdetails: normalizedStructured?.factuurdetails || {},
@@ -723,6 +789,8 @@ export default async function handler(req, res) {
       profile_suggestion: profileSuggestion,
       profiles: availableProfiles,
       structured: normalizedStructured || structured,
+      vendor_match: vendorDiff,
+      customer_match: customerDiff,
     });
   } catch (err) {
     console.error("❌ Error in analyze:", err);

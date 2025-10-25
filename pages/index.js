@@ -9,6 +9,9 @@ import BookingsView from "../components/views/BookingsView";
 import LineItemsView from "../components/views/LineItemsView";
 import ReportsView from "../components/views/ReportsView";
 import SettingsView from "../components/views/SettingsView";
+import VendorManagementView from "../components/views/VendorManagementView";
+import CustomerManagementView from "../components/views/CustomerManagementView";
+import InvoiceBuilderView from "../components/views/InvoiceBuilderView";
 
 const DEMO_UPLOADS = [
   { id: "demo-1", filename: "Acme_Invoice_1032.pdf", status: "Processing", action: "Open" },
@@ -449,6 +452,12 @@ export default function Home() {
             latestAnalysis={analysis}
           />
         );
+      case "vendors":
+        return <VendorManagementView />;
+      case "customers":
+        return <CustomerManagementView />;
+      case "invoiceBuilder":
+        return <InvoiceBuilderView />;
       case "lineItems":
         return <LineItemsView />;
       case "reports":

@@ -6,8 +6,11 @@ import styles from "./AppLayout.module.css";
 const NAV_ITEMS = [
   { id: "capture", label: "+ Capture Invoice" },
   { id: "inbox", label: "Inbox" },
-  { id: "invoices", label: "Invoices" },
+  { id: "invoices", label: "Received Invoices" },
   { id: "bookings", label: "Bookings" },
+  { id: "vendors", label: "Vendors" },
+  { id: "customers", label: "Customers" },
+  { id: "invoiceBuilder", label: "Generate Invoice" },
   { id: "lineItems", label: "Line Items" },
   { id: "dashboard", label: "Dashboard" },
   { id: "reports", label: "Reports" },

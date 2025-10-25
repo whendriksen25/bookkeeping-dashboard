@@ -1,0 +1,330 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.topRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 20px;
+}
+
+.mainGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 0.9fr);
+  gap: 20px;
+}
+
+.leftColumn,
+.centerColumn,
+.rightColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.05);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cardHeader h2,
+.cardHeader h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.muted {
+  color: #64748b;
+  font-size: 0.8rem;
+}
+
+.searchRow,
+.filterRow,
+.headerActions,
+.footerActions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.searchRow input,
+.searchRow select,
+.filterRow select,
+.filterRow input {
+  flex: 1;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-size: 0.9rem;
+}
+
+.vendorList,
+.taskList,
+.tagList,
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vendorList li,
+.taskList li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.vendorList strong,
+.taskList strong {
+  display: block;
+  font-size: 0.95rem;
+  color: #0f172a;
+}
+
+.vendorList span,
+.taskList span {
+  display: block;
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
+.vendorBadge {
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.metricGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metricGrid dt {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.metricGrid dd {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.detailList {
+  display: grid;
+  gap: 12px;
+}
+
+.detailList div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detailList dt {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+}
+
+.detailList dd {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #0f172a;
+}
+
+.twoColRow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.diffGrid {
+  display: grid;
+  gap: 16px;
+}
+
+.diffLabel {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.diffValue {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.diffValue small {
+  color: #94a3b8;
+  font-size: 0.7rem;
+}
+
+.primaryButton,
+.ghostButton,
+.smallButton,
+.tagButton {
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+}
+
+.primaryButton {
+  background: #0ea5e9;
+  color: #ffffff;
+}
+
+.ghostButton,
+.smallButton {
+  background: #eef2ff;
+  color: #4338ca;
+}
+
+.smallButton {
+  padding: 6px 12px;
+  font-size: 0.75rem;
+}
+
+.tagGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.tagButton {
+  background: #f1f5f9;
+  color: #0f172a;
+  border: 1px solid #e2e8f0;
+}
+
+.simpleTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.simpleTable th,
+.simpleTable td {
+  border-bottom: 1px solid #e2e8f0;
+  padding: 8px;
+  text-align: left;
+}
+
+.tagList li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  padding: 6px 0;
+}
+
+.tagDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #0ea5e9;
+  display: inline-flex;
+}
+
+.comparisonGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  font-size: 0.85rem;
+  color: #475569;
+}
+
+.previewBox {
+  height: 120px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5f5;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  font-size: 0.85rem;
+}
+
+.timeline {
+  gap: 10px;
+}
+
+.timeline li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  font-size: 0.85rem;
+}
+
+.timeline-positive {
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.timeline li strong {
+  color: #0f172a;
+}
+
+.timeline li span {
+  color: #64748b;
+  font-size: 0.75rem;
+}
+
+.tagList,
+.timeline {
+  max-height: 200px;
+  overflow: auto;
+}
+
+@media (max-width: 1100px) {
+  .mainGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .topRow {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  }
+}
